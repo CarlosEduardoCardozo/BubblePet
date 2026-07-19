@@ -155,3 +155,30 @@
     @apply font-sans;
   }
 }
+
+/* Agenda (FullCalendar) — a toolbar é nossa (AgendaToolbar.tsx); estas regras
+   só cobrem o que o FullCalendar renderiza por conta própria e não tem prop
+   de estilo pra isso: fora do horário de funcionamento (businessHours) e o
+   cartão de evento. */
+/* Especificidade igual à regra própria do FullCalendar (.fc .fc-non-business
+   com "background" shorthand) — sem !important ela perde a briga de cascata
+   contra o <style> que a lib injeta em runtime. */
+.fc .fc-non-business {
+  background-color: transparent !important;
+  background-image: repeating-linear-gradient(
+    45deg,
+    var(--muted) 0px,
+    var(--muted) 6px,
+    transparent 6px,
+    transparent 14px
+  ) !important;
+}
+
+.fc-event {
+  border-radius: 8px;
+  transition: filter 0.15s ease;
+}
+
+.fc-event:hover {
+  filter: brightness(0.96);
+}

@@ -2,7 +2,7 @@
 
 import { useCallback, useRef, useState } from "react";
 import { DateTime } from "luxon";
-import { Plus } from "lucide-react";
+import { Plus, Gift } from "lucide-react";
 import FullCalendar from "@fullcalendar/react";
 import timeGridPlugin from "@fullcalendar/timegrid";
 import interactionPlugin from "@fullcalendar/interaction";
@@ -13,13 +13,25 @@ import type {
   DateSelectArg,
   DatesSetArg,
   EventContentArg,
+  DayHeaderContentArg,
 } from "@fullcalendar/core";
 import { createClient } from "@/lib/supabase/client";
 import { NovoAgendamentoSheet } from "./NovoAgendamentoSheet";
 import { AgendamentoDetailSheet } from "./AgendamentoDetailSheet";
 import { MiniCalendar } from "./MiniCalendar";
 import { AgendaFilters, EMPTY_FILTERS, type AgendaFiltersState } from "./AgendaFilters";
+import { AgendaToolbar, type AgendaViewType } from "./AgendaToolbar";
+import { nomeFeriado } from "@/lib/feriados-br";
 import type { AgendamentoStatus } from "@/lib/agendamento";
+
+// Padrão fixo por enquanto — não existe "horário de funcionamento" por
+// petshop em nenhuma fase do doc. Quando existir, troca por config do banco;
+// o mecanismo visual (classe .fc-non-business em globals.css) já fica pronto.
+const HORARIO_FUNCIONAMENTO = {
+  daysOfWeek: [1, 2, 3, 4, 5, 6],
+  startTime: "08:00",
+  endTime: "18:00",
+};
 
 const ZONE = "America/Sao_Paulo";
 
@@ -84,6 +96,8 @@ export function AgendaView({
   const [detalheId, setDetalheId] = useState<string | null>(null);
   const [currentDate, setCurrentDate] = useState(new Date());
   const [filters, setFilters] = useState<AgendaFiltersState>(EMPTY_FILTERS);
+  const [viewTitle, setViewTitle] = useState("");
+  const [viewType, setViewType] = useState<AgendaViewType>("timeGridWeek");
   const rangeRef = useRef<{ start: Date; end: Date } | null>(null);
 
   const carregarEventos = useCallback(async (start: Date, end: Date) => {
@@ -128,6 +142,8 @@ export function AgendaView({
     const hoje = new Date();
     const hojeNaVista = hoje >= arg.start && hoje < arg.end;
     setCurrentDate(hojeNaVista ? hoje : arg.start);
+    setViewTitle(arg.view.title);
+    setViewType(arg.view.type as AgendaViewType);
     void carregarEventos(arg.start, arg.end);
   }
 
@@ -141,6 +157,22 @@ export function AgendaView({
 
   function handleSelectDate(date: Date) {
     calendarRef.current?.getApi().gotoDate(date);
+  }
+
+  function handlePrev() {
+    calendarRef.current?.getApi().prev();
+  }
+
+  function handleNext() {
+    calendarRef.current?.getApi().next();
+  }
+
+  function handleToday() {
+    calendarRef.current?.getApi().today();
+  }
+
+  function handleChangeView(view: AgendaViewType) {
+    calendarRef.current?.getApi().changeView(view);
   }
 
   function handleFloatingAdd() {
@@ -169,6 +201,17 @@ export function AgendaView({
     );
   }
 
+  function renderDayHeader(arg: DayHeaderContentArg) {
+    const dataISO = DateTime.fromJSDate(arg.date).setZone(ZONE).toFormat("yyyy-LL-dd");
+    const feriado = nomeFeriado(dataISO);
+    return (
+      <div className="flex items-center justify-center gap-1" title={feriado ?? undefined}>
+        <span>{arg.text}</span>
+        {feriado && <Gift size={12} className="text-primary" />}
+      </div>
+    );
+  }
+
   const filteredEvents = events.filter(
     (event) =>
       (!filters.status || event.status === filters.status) &&
@@ -193,17 +236,22 @@ export function AgendaView({
           />
         </aside>
 
-        <div className="min-w-0 flex-1 rounded-[12px] border border-border bg-white p-4 [&_.fc-toolbar-title]:text-lg [&_.fc-toolbar-title]:font-semibold">
+        <div className="min-w-0 flex-1 rounded-[12px] border border-border bg-white p-4">
+          <AgendaToolbar
+            title={viewTitle}
+            view={viewType}
+            onPrev={handlePrev}
+            onNext={handleNext}
+            onToday={handleToday}
+            onChangeView={handleChangeView}
+          />
           <FullCalendar
             ref={calendarRef}
             plugins={[timeGridPlugin, interactionPlugin, luxon3Plugin]}
             timeZone={ZONE}
             initialView="timeGridWeek"
-            headerToolbar={{
-              left: "prev,next today",
-              center: "title",
-              right: "timeGridWeek,timeGridDay",
-            }}
+            headerToolbar={false}
+            businessHours={HORARIO_FUNCIONAMENTO}
             locale={ptBrLocale}
             firstDay={1}
             slotMinTime="07:00:00"
@@ -217,12 +265,13 @@ export function AgendaView({
             select={handleSelect}
             eventClick={handleEventClick}
             eventContent={renderEventContent}
+            dayHeaderContent={renderDayHeader}
             events={filteredEvents.map((e) => ({
               id: e.id,
               title: `${e.petNome} · ${e.servicoNome}`,
               start: e.inicio,
               end: e.fim,
-              backgroundColor: `${STATUS_COLORS[e.status]}1a`,
+              backgroundColor: `${STATUS_COLORS[e.status]}29`,
               borderColor: STATUS_COLORS[e.status],
               extendedProps: { status: e.status },
             }))}
