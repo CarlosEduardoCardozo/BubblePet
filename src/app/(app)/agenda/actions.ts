@@ -75,6 +75,40 @@ export async function createAgendamento(formData: FormData): Promise<ActionResul
   return { success: true };
 }
 
+export async function createAgendamentoComPlano(
+  formData: FormData
+): Promise<ActionResult> {
+  const parsed = agendamentoFields.safeParse({
+    pet_id: formData.get("pet_id"),
+    servico_id: formData.get("servico_id"),
+    inicio: formData.get("inicio"),
+    observacoes: formData.get("observacoes") ?? "",
+  });
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Dados inválidos" };
+  }
+
+  const inicio = new Date(parsed.data.inicio);
+  if (Number.isNaN(inicio.getTime())) {
+    return { error: "Horário inválido" };
+  }
+
+  const supabase = await createClient();
+  // Toda a validação (plano ativo, saldo, conflito) e a escrita do consumo
+  // acontecem dentro da function — mesma regra pra qualquer chamador, não só
+  // o app.
+  const { error } = await supabase.rpc("agendar_com_plano", {
+    p_pet_id: parsed.data.pet_id,
+    p_servico_id: parsed.data.servico_id,
+    p_inicio: inicio.toISOString(),
+    p_observacoes: parsed.data.observacoes || null,
+  });
+  if (error) return { error: error.message };
+
+  revalidatePath("/agenda");
+  return { success: true };
+}
+
 export async function updateAgendamentoStatus(
   id: string,
   status: AgendamentoStatus

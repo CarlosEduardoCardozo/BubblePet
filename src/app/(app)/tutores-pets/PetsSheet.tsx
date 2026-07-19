@@ -15,16 +15,19 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { createPet, deletePet } from "./actions";
-import type { Tutor } from "./TutoresTable";
+import { AssinaturaSection } from "./AssinaturaSection";
+import type { Tutor, PlanoOption } from "./TutoresTable";
 
 export function PetsSheet({
   open,
   onOpenChange,
   tutor,
+  planos,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   tutor: Tutor;
+  planos: PlanoOption[];
 }) {
   const [showForm, setShowForm] = useState(false);
   const [deletingPetId, setDeletingPetId] = useState<string | null>(null);
@@ -83,24 +86,27 @@ export function PetsSheet({
             {petsAtivos.map((pet) => (
               <div
                 key={pet.id}
-                className="flex items-center justify-between rounded-[12px] border border-border p-3"
+                className="flex flex-col gap-2 rounded-[12px] border border-border p-3"
               >
-                <div>
-                  <p className="font-medium">{pet.nome}</p>
-                  <p className="text-sm text-muted-foreground">
-                    {pet.especie}
-                    {pet.raca ? ` · ${pet.raca}` : ""}
-                    {pet.porte ? ` · ${pet.porte}` : ""}
-                  </p>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="font-medium">{pet.nome}</p>
+                    <p className="text-sm text-muted-foreground">
+                      {pet.especie}
+                      {pet.raca ? ` · ${pet.raca}` : ""}
+                      {pet.porte ? ` · ${pet.porte}` : ""}
+                    </p>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    aria-label={`Excluir ${pet.nome}`}
+                    onClick={() => setDeletingPetId(pet.id)}
+                  >
+                    <Trash2 size={16} />
+                  </Button>
                 </div>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  aria-label={`Excluir ${pet.nome}`}
-                  onClick={() => setDeletingPetId(pet.id)}
-                >
-                  <Trash2 size={16} />
-                </Button>
+                <AssinaturaSection petId={pet.id} planos={planos} />
               </div>
             ))}
 

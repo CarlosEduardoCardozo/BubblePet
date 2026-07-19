@@ -29,7 +29,18 @@ export default async function TutoresPetsPage({
   const { data: tutores, count } = await query;
   const totalPages = Math.max(1, Math.ceil((count ?? 0) / PAGE_SIZE));
 
+  const { data: planos } = await supabase
+    .from("planos")
+    .select("id, nome, creditos_mes")
+    .eq("ativo", true)
+    .order("nome");
+
   return (
-    <TutoresTable tutores={tutores ?? []} page={page} totalPages={totalPages} />
+    <TutoresTable
+      tutores={tutores ?? []}
+      page={page}
+      totalPages={totalPages}
+      planos={planos ?? []}
+    />
   );
 }

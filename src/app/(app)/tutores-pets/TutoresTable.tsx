@@ -41,14 +41,18 @@ export type Tutor = {
   pets: Pet[];
 };
 
+export type PlanoOption = { id: string; nome: string; creditos_mes: number };
+
 export function TutoresTable({
   tutores,
   page,
   totalPages,
+  planos,
 }: {
   tutores: Tutor[];
   page: number;
   totalPages: number;
+  planos: PlanoOption[];
 }) {
   const [formTarget, setFormTarget] = useState<"new" | string | null>(null);
   const [petsTutorId, setPetsTutorId] = useState<string | null>(null);
@@ -166,6 +170,7 @@ export function TutoresTable({
           open={!!petsTutor}
           onOpenChange={(open) => !open && setPetsTutorId(null)}
           tutor={petsTutor}
+          planos={planos}
         />
       )}
 
