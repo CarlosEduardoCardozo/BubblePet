@@ -16,6 +16,7 @@ import type {
   DayHeaderContentArg,
 } from "@fullcalendar/core";
 import { createClient } from "@/lib/supabase/client";
+import { cn } from "@/lib/utils";
 import { NovoAgendamentoSheet } from "./NovoAgendamentoSheet";
 import { AgendamentoDetailSheet } from "./AgendamentoDetailSheet";
 import { MiniCalendar } from "./MiniCalendar";
@@ -202,12 +203,25 @@ export function AgendaView({
   }
 
   function renderDayHeader(arg: DayHeaderContentArg) {
-    const dataISO = DateTime.fromJSDate(arg.date).setZone(ZONE).toFormat("yyyy-LL-dd");
-    const feriado = nomeFeriado(dataISO);
+    const dia = DateTime.fromJSDate(arg.date).setZone(ZONE).setLocale("pt-BR");
+    const feriado = nomeFeriado(dia.toFormat("yyyy-LL-dd"));
+    const isHoje = dia.hasSame(DateTime.now().setZone(ZONE), "day");
+    const weekdayLabel = dia.toFormat(arg.view.type === "timeGridDay" ? "cccc" : "ccc");
+
     return (
-      <div className="flex items-center justify-center gap-1" title={feriado ?? undefined}>
-        <span>{arg.text}</span>
-        {feriado && <Gift size={12} className="text-primary" />}
+      <div className="flex flex-col items-center gap-1 py-1.5" title={feriado ?? undefined}>
+        <span className="flex items-center gap-1 text-xs font-medium text-muted-foreground">
+          {weekdayLabel}
+          {feriado && <Gift size={11} className="text-primary" />}
+        </span>
+        <span
+          className={cn(
+            "flex size-7 items-center justify-center rounded-full text-base font-semibold",
+            isHoje ? "bg-primary text-primary-foreground" : "text-foreground"
+          )}
+        >
+          {dia.day}
+        </span>
       </div>
     );
   }
