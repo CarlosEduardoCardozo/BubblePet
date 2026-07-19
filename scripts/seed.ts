@@ -36,6 +36,42 @@ async function main() {
     auth: { autoRefreshToken: false, persistSession: false },
   });
 
+  // Reaproveita o usuário se já existir (ex.: criado manualmente no dashboard).
+  let userId: string;
+  const { data: listaUsuarios, error: listError } = await admin.auth.admin.listUsers();
+  if (listError) throw listError;
+  const usuarioExistente = listaUsuarios.users.find((u) => u.email === donoEmail);
+
+  if (usuarioExistente) {
+    userId = usuarioExistente.id;
+    const { error: updateError } = await admin.auth.admin.updateUserById(userId, {
+      password: donoSenha,
+      email_confirm: true,
+    });
+    if (updateError) throw updateError;
+  } else {
+    const { data: userResult, error: userError } = await admin.auth.admin.createUser({
+      email: donoEmail,
+      password: donoSenha,
+      email_confirm: true,
+    });
+    if (userError) throw userError;
+    userId = userResult.user.id;
+  }
+
+  const { data: perfilDoUsuario } = await admin
+    .from("perfis")
+    .select("petshop_id")
+    .eq("id", userId)
+    .maybeSingle();
+
+  if (perfilDoUsuario) {
+    console.log(
+      `\nUsuário ${donoEmail} já tem petshop vinculado (${perfilDoUsuario.petshop_id}). Nada a fazer.`
+    );
+    return;
+  }
+
   const { data: petshop, error: petshopError } = await admin
     .from("petshops")
     .insert({ nome: petshopNome })
@@ -43,15 +79,8 @@ async function main() {
     .single();
   if (petshopError) throw petshopError;
 
-  const { data: userResult, error: userError } = await admin.auth.admin.createUser({
-    email: donoEmail,
-    password: donoSenha,
-    email_confirm: true,
-  });
-  if (userError) throw userError;
-
   const { error: perfilError } = await admin.from("perfis").insert({
-    id: userResult.user.id,
+    id: userId,
     petshop_id: petshop.id,
     nome: donoNome,
     role: "dono",
