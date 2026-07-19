@@ -6,10 +6,12 @@ function MetricCard({
   icon: Icon,
   label,
   value,
+  live = false,
 }: {
   icon: React.ElementType;
   label: string;
   value: string;
+  live?: boolean;
 }) {
   return (
     <Card>
@@ -17,10 +19,21 @@ function MetricCard({
         <CardTitle className="text-sm font-medium text-muted-foreground">
           {label}
         </CardTitle>
-        <Icon size={18} className="text-primary" />
+        <Icon
+          size={18}
+          className={live ? "text-primary" : "text-muted-foreground/50"}
+        />
       </CardHeader>
       <CardContent>
-        <div className="text-2xl font-semibold">{value}</div>
+        <div
+          className={
+            live
+              ? "text-2xl font-semibold"
+              : "text-2xl font-semibold text-muted-foreground/70"
+          }
+        >
+          {value}
+        </div>
       </CardContent>
     </Card>
   );
@@ -52,6 +65,7 @@ export default async function DashboardPage() {
           icon={Users}
           label="Tutores cadastrados"
           value={String(tutoresCount ?? 0)}
+          live
         />
       </div>
     </div>

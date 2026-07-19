@@ -1,7 +1,6 @@
 import { Search, LogOut } from "lucide-react";
 import { logout } from "@/app/(app)/actions";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 
 function iniciais(nome: string) {
@@ -24,23 +23,27 @@ export function Topbar({
     <header className="flex h-14 items-center gap-4 border-b border-border bg-white px-6">
       <span className="font-semibold text-foreground">{petshopNome}</span>
 
-      <div className="relative ml-4 hidden max-w-sm flex-1 md:block">
-        <Search
-          size={16}
-          className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground"
-        />
-        <Input placeholder="Buscar..." className="pl-8" disabled />
-      </div>
-
-      <div className="ml-auto flex items-center gap-3">
-        <Avatar className="size-8">
-          <AvatarFallback className="bg-primary/10 text-xs font-medium text-primary">
-            {iniciais(donoNome) || "?"}
-          </AvatarFallback>
-        </Avatar>
-        <span className="hidden text-sm text-muted-foreground sm:inline">
-          {donoNome}
-        </span>
+      <div className="ml-auto flex items-center gap-1">
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          disabled
+          aria-label="Busca global — em breve"
+          title="Busca global — em breve"
+        >
+          <Search size={16} />
+        </Button>
+        <div className="mx-2 flex items-center gap-2">
+          <Avatar className="size-8">
+            <AvatarFallback className="bg-primary/10 text-xs font-medium text-primary">
+              {iniciais(donoNome) || "?"}
+            </AvatarFallback>
+          </Avatar>
+          <span className="hidden text-sm text-muted-foreground sm:inline">
+            {donoNome}
+          </span>
+        </div>
         <form action={logout}>
           <Button type="submit" variant="ghost" size="icon" aria-label="Sair">
             <LogOut size={16} />
