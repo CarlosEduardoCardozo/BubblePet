@@ -36,6 +36,18 @@ export default async function PlanosPage({
     .eq("ativo", true)
     .order("nome");
 
+  // Sem !inner: assim planos sem nenhum assinante continuam aparecendo com 0
+  // em vez de sumir da lista. Agrupo em memória em vez de N+1 queries.
+  const { data: assinaturasAtivas } = await supabase
+    .from("assinaturas")
+    .select("plano_id")
+    .eq("status", "ativa");
+
+  const assinantesPorPlano: Record<string, number> = {};
+  for (const row of assinaturasAtivas ?? []) {
+    assinantesPorPlano[row.plano_id] = (assinantesPorPlano[row.plano_id] ?? 0) + 1;
+  }
+
   return (
     <PlanosTable
       planos={(planos ?? []).map((plano) => ({
@@ -51,6 +63,7 @@ export default async function PlanosPage({
       page={page}
       totalPages={totalPages}
       servicos={servicos ?? []}
+      assinantesPorPlano={assinantesPorPlano}
     />
   );
 }

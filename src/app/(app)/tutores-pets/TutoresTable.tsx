@@ -12,6 +12,7 @@ import {
   TableCell,
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { SearchInput } from "@/components/shared/SearchInput";
 import { Pagination } from "@/components/shared/Pagination";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
@@ -29,7 +30,24 @@ export type Pet = {
   nascimento: string | null;
   observacoes: string | null;
   ativo: boolean;
+  // assinaturas: one-to-many (array). Dentro dela, planos é many-to-one
+  // (objeto único) — confirmado direto na API REST, não dá pra confiar na
+  // inferência de tipo do supabase-js aqui (não geramos os tipos do banco).
+  assinaturas: { status: string; planos: { nome: string } | null }[];
 };
+
+function planosAtivosDoTutor(pets: Pet[]): string[] {
+  const nomes = new Set<string>();
+  for (const pet of pets) {
+    for (const assinatura of pet.assinaturas) {
+      const nomePlano = assinatura.planos?.nome;
+      if (assinatura.status === "ativa" && nomePlano) {
+        nomes.add(nomePlano);
+      }
+    }
+  }
+  return Array.from(nomes);
+}
 
 export type Tutor = {
   id: string;
@@ -107,12 +125,14 @@ export function TutoresTable({
                 <TableHead>Telefone</TableHead>
                 <TableHead>E-mail</TableHead>
                 <TableHead>Pets</TableHead>
+                <TableHead>Plano</TableHead>
                 <TableHead className="w-0" />
               </TableRow>
             </TableHeader>
             <TableBody>
               {tutores.map((tutor) => {
                 const petsAtivos = tutor.pets.filter((p) => p.ativo);
+                const planosAtivos = planosAtivosDoTutor(petsAtivos);
                 return (
                   <TableRow key={tutor.id}>
                     <TableCell className="font-medium">{tutor.nome}</TableCell>
@@ -128,6 +148,17 @@ export function TutoresTable({
                       >
                         <PawPrint size={14} /> {petsAtivos.length}
                       </Button>
+                    </TableCell>
+                    <TableCell>
+                      {planosAtivos.length > 0 ? (
+                        <div className="flex flex-wrap gap-1">
+                          {planosAtivos.map((nome) => (
+                            <Badge key={nome}>{nome}</Badge>
+                          ))}
+                        </div>
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )}
                     </TableCell>
                     <TableCell>
                       <div className="flex justify-end gap-1">

@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
-import { Plus, Pencil, Trash2 } from "lucide-react";
+import { Plus, Pencil, Trash2, Users } from "lucide-react";
 import {
   Table,
   TableHeader,
@@ -18,6 +18,7 @@ import { Pagination } from "@/components/shared/Pagination";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { formatCentavos } from "@/lib/currency";
 import { PlanoSheet } from "./PlanoSheet";
+import { AssinantesSheet } from "./AssinantesSheet";
 import { deletePlano } from "./actions";
 
 export type Plano = {
@@ -37,14 +38,17 @@ export function PlanosTable({
   page,
   totalPages,
   servicos,
+  assinantesPorPlano,
 }: {
   planos: Plano[];
   page: number;
   totalPages: number;
   servicos: ServicoOption[];
+  assinantesPorPlano: Record<string, number>;
 }) {
   const [formTarget, setFormTarget] = useState<"new" | string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [assinantesPlanoId, setAssinantesPlanoId] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
   const editingPlano =
@@ -52,6 +56,7 @@ export function PlanosTable({
       ? (planos.find((p) => p.id === formTarget) ?? null)
       : null;
   const deletingPlano = planos.find((p) => p.id === deletingId) ?? null;
+  const assinantesPlano = planos.find((p) => p.id === assinantesPlanoId) ?? null;
 
   function handleDelete() {
     if (!deletingId) return;
@@ -95,6 +100,7 @@ export function PlanosTable({
                 <TableHead>Créditos/mês</TableHead>
                 <TableHead>Mensalidade</TableHead>
                 <TableHead>Acumula</TableHead>
+                <TableHead>Assinantes</TableHead>
                 <TableHead className="w-0" />
               </TableRow>
             </TableHeader>
@@ -111,6 +117,15 @@ export function PlanosTable({
                     ) : (
                       <span className="text-muted-foreground">Não</span>
                     )}
+                  </TableCell>
+                  <TableCell>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setAssinantesPlanoId(plano.id)}
+                    >
+                      <Users size={14} /> {assinantesPorPlano[plano.id] ?? 0}
+                    </Button>
                   </TableCell>
                   <TableCell>
                     <div className="flex justify-end gap-1">
@@ -147,6 +162,15 @@ export function PlanosTable({
         plano={editingPlano}
         servicos={servicos}
       />
+
+      {assinantesPlano && (
+        <AssinantesSheet
+          open={!!assinantesPlano}
+          onOpenChange={(open) => !open && setAssinantesPlanoId(null)}
+          planoId={assinantesPlano.id}
+          planoNome={assinantesPlano.nome}
+        />
+      )}
 
       <ConfirmDialog
         open={!!deletingId}

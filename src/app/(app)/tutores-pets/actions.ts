@@ -113,10 +113,12 @@ const petFields = z.object({
   observacoes: z.string().trim(),
 });
 
+type CreatePetResult = { error: string } | { success: true; petId: string };
+
 export async function createPet(
   tutorId: string,
   formData: FormData
-): Promise<ActionResult> {
+): Promise<CreatePetResult> {
   const parsed = petFields.safeParse({
     nome: formData.get("nome"),
     especie: formData.get("especie") ?? "cachorro",
@@ -132,20 +134,24 @@ export async function createPet(
   const supabase = await createClient();
   const petshopId = await getCurrentPetshopId(supabase);
 
-  const { error } = await supabase.from("pets").insert({
-    petshop_id: petshopId,
-    tutor_id: tutorId,
-    nome: parsed.data.nome,
-    especie: parsed.data.especie,
-    raca: parsed.data.raca || null,
-    porte: parsed.data.porte || null,
-    nascimento: parsed.data.nascimento || null,
-    observacoes: parsed.data.observacoes || null,
-  });
-  if (error) return { error: error.message };
+  const { data, error } = await supabase
+    .from("pets")
+    .insert({
+      petshop_id: petshopId,
+      tutor_id: tutorId,
+      nome: parsed.data.nome,
+      especie: parsed.data.especie,
+      raca: parsed.data.raca || null,
+      porte: parsed.data.porte || null,
+      nascimento: parsed.data.nascimento || null,
+      observacoes: parsed.data.observacoes || null,
+    })
+    .select("id")
+    .single();
+  if (error || !data) return { error: error?.message ?? "Erro ao cadastrar pet." };
 
   revalidatePath("/tutores-pets");
-  return { success: true };
+  return { success: true, petId: data.id };
 }
 
 export async function deletePet(id: string): Promise<ActionResult> {

@@ -15,6 +15,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { createPet, deletePet } from "./actions";
+import { assinarPlano } from "./planos-actions";
 import { AssinaturaSection } from "./AssinaturaSection";
 import type { Tutor, PlanoOption } from "./TutoresTable";
 
@@ -41,16 +42,28 @@ export function PetsSheet({
     event.preventDefault();
     const form = event.currentTarget;
     const formData = new FormData(form);
+    const planoId = formData.get("plano_id") as string;
     setError(null);
     startTransition(async () => {
       const result = await createPet(tutor.id, formData);
       if ("error" in result) {
         setError(result.error);
-      } else {
-        toast.success("Pet cadastrado.");
-        form.reset();
-        setShowForm(false);
+        return;
       }
+
+      if (planoId) {
+        const assinaturaResult = await assinarPlano(result.petId, planoId);
+        if ("error" in assinaturaResult) {
+          toast.error(`Pet cadastrado, mas não deu pra assinar o plano: ${assinaturaResult.error}`);
+          form.reset();
+          setShowForm(false);
+          return;
+        }
+      }
+
+      toast.success(planoId ? "Pet cadastrado e plano assinado." : "Pet cadastrado.");
+      form.reset();
+      setShowForm(false);
     });
   }
 
@@ -106,7 +119,12 @@ export function PetsSheet({
                     <Trash2 size={16} />
                   </Button>
                 </div>
-                <AssinaturaSection petId={pet.id} planos={planos} />
+                <div className="flex flex-col gap-1">
+                  <span className="text-xs font-medium text-muted-foreground">
+                    Plano
+                  </span>
+                  <AssinaturaSection petId={pet.id} planos={planos} />
+                </div>
               </div>
             ))}
 
@@ -148,6 +166,24 @@ export function PetsSheet({
                   <Label htmlFor="pet-raca">Raça</Label>
                   <Input id="pet-raca" name="raca" />
                 </div>
+                {planos.length > 0 && (
+                  <div className="flex flex-col gap-1.5">
+                    <Label htmlFor="pet-plano">Assinar plano já</Label>
+                    <select
+                      id="pet-plano"
+                      name="plano_id"
+                      defaultValue=""
+                      className="h-8 rounded-[12px] border border-input bg-transparent px-2.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+                    >
+                      <option value="">Sem plano por enquanto</option>
+                      {planos.map((plano) => (
+                        <option key={plano.id} value={plano.id}>
+                          {plano.nome} ({plano.creditos_mes}/mês)
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
                 {error && <p className="text-sm text-destructive">{error}</p>}
                 <div className="flex justify-end gap-2">
                   <Button

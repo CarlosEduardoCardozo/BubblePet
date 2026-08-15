@@ -1,5 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
-import { TutoresTable } from "./TutoresTable";
+import { TutoresTable, type Tutor } from "./TutoresTable";
 
 const PAGE_SIZE = 20;
 
@@ -16,7 +16,7 @@ export default async function TutoresPetsPage({
   let query = supabase
     .from("tutores")
     .select(
-      "id, nome, telefone, email, cpf, observacoes, pets(id, nome, especie, raca, porte, nascimento, observacoes, ativo)",
+      "id, nome, telefone, email, cpf, observacoes, pets(id, nome, especie, raca, porte, nascimento, observacoes, ativo, assinaturas(status, planos(nome)))",
       { count: "exact" }
     )
     .order("nome")
@@ -37,7 +37,7 @@ export default async function TutoresPetsPage({
 
   return (
     <TutoresTable
-      tutores={tutores ?? []}
+      tutores={(tutores ?? []) as unknown as Tutor[]}
       page={page}
       totalPages={totalPages}
       planos={planos ?? []}

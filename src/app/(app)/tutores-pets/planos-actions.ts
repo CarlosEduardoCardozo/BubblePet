@@ -49,6 +49,7 @@ export async function assinarPlano(
   if (movimentoError) return { error: movimentoError.message };
 
   revalidatePath("/tutores-pets");
+  revalidatePath("/planos");
   return { success: true };
 }
 
@@ -63,5 +64,6 @@ export async function cancelarAssinatura(
   if (error) return { error: error.message };
 
   revalidatePath("/tutores-pets");
+  revalidatePath("/planos");
   return { success: true };
 }
