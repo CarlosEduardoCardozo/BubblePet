@@ -6,7 +6,8 @@ import { ChevronLeft, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const ZONE = "America/Sao_Paulo";
-const WEEKDAY_LABELS = ["D", "S", "T", "Q", "Q", "S", "S"];
+// Semana começa na segunda, igual ao grid principal (firstDay={1}).
+const WEEKDAY_LABELS = ["S", "T", "Q", "Q", "S", "S", "D"];
 const MESES = Array.from({ length: 12 }, (_, i) => {
   const nome = DateTime.fromObject({ month: i + 1, day: 1 })
     .setLocale("pt-BR")
@@ -40,7 +41,7 @@ export function MiniCalendar({
 
   const today = DateTime.now().setZone(ZONE).startOf("day");
   const anos = Array.from({ length: 8 }, (_, i) => today.year - 2 + i);
-  const startOffset = viewedMonth.weekday % 7;
+  const startOffset = viewedMonth.weekday - 1; // luxon: 1=segunda
   const gridStart = viewedMonth.minus({ days: startOffset });
   const days = Array.from({ length: 42 }, (_, i) => gridStart.plus({ days: i }));
 

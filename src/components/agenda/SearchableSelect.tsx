@@ -16,12 +16,14 @@ const ALL_VALUE = "__todos__";
 export type SelectOption = { value: string; label: string };
 
 export function SearchableSelect({
+  id,
   value,
   onChange,
   options,
   placeholder,
   allLabel = "Todos",
 }: {
+  id?: string;
   value: string;
   onChange: (value: string) => void;
   options: SelectOption[];
@@ -52,7 +54,7 @@ export function SearchableSelect({
         setSearch("");
       }}
     >
-      <SelectTrigger className="h-8 w-full rounded-[12px]">
+      <SelectTrigger id={id} className="h-8 w-full rounded-[12px] bg-white">
         <SelectValue placeholder={placeholder}>
           {(val: unknown) => labelFor(val as string)}
         </SelectValue>
