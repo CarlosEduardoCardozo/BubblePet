@@ -3,6 +3,7 @@
 import { X } from "lucide-react";
 import { AGENDAMENTO_STATUSES } from "@/lib/agendamento";
 import { STATUS_LABELS, type PetOption, type ServicoOption } from "./AgendaView";
+import { SearchableSelect } from "./SearchableSelect";
 
 export type AgendaFiltersState = {
   status: string;
@@ -15,9 +16,6 @@ export const EMPTY_FILTERS: AgendaFiltersState = {
   petId: "",
   servicoId: "",
 };
-
-const selectClassName =
-  "h-8 rounded-[12px] border border-input bg-transparent px-2.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50";
 
 export function AgendaFilters({
   filters,
@@ -48,60 +46,42 @@ export function AgendaFilters({
       </div>
 
       <div className="flex flex-col gap-1">
-        <label className="text-xs text-muted-foreground" htmlFor="filtro-status">
-          Status
-        </label>
-        <select
-          id="filtro-status"
+        <label className="text-xs text-muted-foreground">Status</label>
+        <SearchableSelect
           value={filters.status}
-          onChange={(event) => onChange({ ...filters, status: event.target.value })}
-          className={selectClassName}
-        >
-          <option value="">Todos</option>
-          {AGENDAMENTO_STATUSES.map((status) => (
-            <option key={status} value={status}>
-              {STATUS_LABELS[status]}
-            </option>
-          ))}
-        </select>
+          onChange={(status) => onChange({ ...filters, status })}
+          placeholder="Todos"
+          options={AGENDAMENTO_STATUSES.map((status) => ({
+            value: status,
+            label: STATUS_LABELS[status],
+          }))}
+        />
       </div>
 
       <div className="flex flex-col gap-1">
-        <label className="text-xs text-muted-foreground" htmlFor="filtro-pet">
-          Pet
-        </label>
-        <select
-          id="filtro-pet"
+        <label className="text-xs text-muted-foreground">Pet</label>
+        <SearchableSelect
           value={filters.petId}
-          onChange={(event) => onChange({ ...filters, petId: event.target.value })}
-          className={selectClassName}
-        >
-          <option value="">Todos</option>
-          {pets.map((pet) => (
-            <option key={pet.id} value={pet.id}>
-              {pet.nome} — {pet.tutorNome}
-            </option>
-          ))}
-        </select>
+          onChange={(petId) => onChange({ ...filters, petId })}
+          placeholder="Todos"
+          options={pets.map((pet) => ({
+            value: pet.id,
+            label: `${pet.nome} — ${pet.tutorNome}`,
+          }))}
+        />
       </div>
 
       <div className="flex flex-col gap-1">
-        <label className="text-xs text-muted-foreground" htmlFor="filtro-servico">
-          Serviço
-        </label>
-        <select
-          id="filtro-servico"
+        <label className="text-xs text-muted-foreground">Serviço</label>
+        <SearchableSelect
           value={filters.servicoId}
-          onChange={(event) => onChange({ ...filters, servicoId: event.target.value })}
-          className={selectClassName}
-        >
-          <option value="">Todos</option>
-          {servicos.map((servico) => (
-            <option key={servico.id} value={servico.id}>
-              {servico.nome}
-            </option>
-          ))}
-        </select>
+          onChange={(servicoId) => onChange({ ...filters, servicoId })}
+          placeholder="Todos"
+          options={servicos.map((servico) => ({
+            value: servico.id,
+            label: servico.nome,
+          }))}
+        />
       </div>
     </div>
   );

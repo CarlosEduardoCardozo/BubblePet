@@ -20,6 +20,7 @@ import { cn } from "@/lib/utils";
 import { NovoAgendamentoSheet } from "./NovoAgendamentoSheet";
 import { AgendamentoDetailSheet } from "./AgendamentoDetailSheet";
 import { MiniCalendar } from "./MiniCalendar";
+import { HorariosDisponiveis } from "./HorariosDisponiveis";
 import { AgendaFilters, EMPTY_FILTERS, type AgendaFiltersState } from "./AgendaFilters";
 import { AgendaToolbar, type AgendaViewType } from "./AgendaToolbar";
 import { nomeFeriado } from "@/lib/feriados-br";
@@ -95,7 +96,7 @@ export function AgendaView({
   const [events, setEvents] = useState<AgendamentoEvent[]>([]);
   const [novoSlot, setNovoSlot] = useState<{ start: Date } | null>(null);
   const [detalheId, setDetalheId] = useState<string | null>(null);
-  const [currentDate, setCurrentDate] = useState(new Date());
+  const [selectedDate, setSelectedDate] = useState(new Date());
   const [filters, setFilters] = useState<AgendaFiltersState>(EMPTY_FILTERS);
   const [viewTitle, setViewTitle] = useState("");
   const [viewType, setViewType] = useState<AgendaViewType>("timeGridWeek");
@@ -137,12 +138,16 @@ export function AgendaView({
 
   function handleDatesSet(arg: DatesSetArg) {
     rangeRef.current = { start: arg.start, end: arg.end };
-    // getDate() da FullCalendar retorna o início da semana visível, não
-    // necessariamente "hoje" (nosso firstDay é segunda, não domingo). Destaca
-    // hoje quando ele está na semana visível; senão destaca o início dela.
-    const hoje = new Date();
-    const hojeNaVista = hoje >= arg.start && hoje < arg.end;
-    setCurrentDate(hojeNaVista ? hoje : arg.start);
+    // Preserva uma seleção explícita (clique no mini-calendário ou no
+    // cabeçalho de um dia) se ela ainda estiver visível; senão cai pro
+    // padrão de sempre: hoje se estiver na semana visível, senão o início
+    // dela. getDate() da FullCalendar não serve pra isso — retorna o início
+    // da semana visível, não necessariamente "hoje" (firstDay é segunda).
+    setSelectedDate((atual) => {
+      if (atual >= arg.start && atual < arg.end) return atual;
+      const hoje = new Date();
+      return hoje >= arg.start && hoje < arg.end ? hoje : arg.start;
+    });
     setViewTitle(arg.view.title);
     setViewType(arg.view.type as AgendaViewType);
     void carregarEventos(arg.start, arg.end);
@@ -157,6 +162,7 @@ export function AgendaView({
   }
 
   function handleSelectDate(date: Date) {
+    setSelectedDate(date);
     calendarRef.current?.getApi().gotoDate(date);
   }
 
@@ -177,7 +183,7 @@ export function AgendaView({
   }
 
   function handleFloatingAdd() {
-    setNovoSlot({ start: proximoSlotPadrao(currentDate) });
+    setNovoSlot({ start: proximoSlotPadrao(selectedDate) });
   }
 
   function reload() {
@@ -205,24 +211,35 @@ export function AgendaView({
   function renderDayHeader(arg: DayHeaderContentArg) {
     const dia = DateTime.fromJSDate(arg.date).setZone(ZONE).setLocale("pt-BR");
     const feriado = nomeFeriado(dia.toFormat("yyyy-LL-dd"));
-    const isHoje = dia.hasSame(DateTime.now().setZone(ZONE), "day");
-    const weekdayLabel = dia.toFormat(arg.view.type === "timeGridDay" ? "cccc" : "ccc");
+    const isSelecionado = dia.hasSame(DateTime.fromJSDate(selectedDate).setZone(ZONE), "day");
+    const ehVisaoDia = arg.view.type === "timeGridDay";
+    const weekdayLabel = dia.toFormat(ehVisaoDia ? "cccc" : "ccc");
 
     return (
-      <div className="flex flex-col items-center gap-1 py-1.5" title={feriado ?? undefined}>
+      <button
+        type="button"
+        onClick={() => handleSelectDate(arg.date)}
+        // Sem isso, o mousedown propaga pro listener global do FullCalendar,
+        // que faz seu próprio hit-test por coordenada e interpreta o clique
+        // no cabeçalho como um "select" na grade (abre o sheet de novo
+        // agendamento num horário aleatório, além do nosso onClick rodar).
+        onMouseDown={(event) => event.stopPropagation()}
+        className="flex w-full flex-col items-center gap-1 py-1.5"
+        title={feriado ?? undefined}
+      >
         <span className="flex items-center gap-1 text-xs font-medium text-muted-foreground">
-          {weekdayLabel}
+          {ehVisaoDia ? weekdayLabel : weekdayLabel.toUpperCase()}
           {feriado && <Gift size={11} className="text-primary" />}
         </span>
         <span
           className={cn(
-            "flex size-7 items-center justify-center rounded-full text-base font-semibold",
-            isHoje ? "bg-primary text-primary-foreground" : "text-foreground"
+            "flex size-7 items-center justify-center rounded-md text-base font-semibold",
+            isSelecionado ? "bg-primary text-primary-foreground" : "text-foreground"
           )}
         >
           {dia.day}
         </span>
-      </div>
+      </button>
     );
   }
 
@@ -241,12 +258,16 @@ export function AgendaView({
 
       <div className="flex gap-4">
         <aside className="flex w-64 shrink-0 flex-col gap-4">
-          <MiniCalendar selectedDate={currentDate} onSelectDate={handleSelectDate} />
+          <MiniCalendar selectedDate={selectedDate} onSelectDate={handleSelectDate} />
           <AgendaFilters
             filters={filters}
             onChange={setFilters}
             pets={pets}
             servicos={servicos}
+          />
+          <HorariosDisponiveis
+            selectedDate={selectedDate}
+            onSelectSlot={(start) => setNovoSlot({ start })}
           />
         </aside>
 
@@ -268,8 +289,10 @@ export function AgendaView({
             businessHours={HORARIO_FUNCIONAMENTO}
             locale={ptBrLocale}
             firstDay={1}
-            slotMinTime="07:00:00"
+            slotMinTime="06:30:00"
             slotMaxTime="21:00:00"
+            slotDuration="00:10:00"
+            slotLabelInterval="00:10:00"
             allDaySlot={false}
             selectable
             selectMirror

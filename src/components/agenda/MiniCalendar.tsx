@@ -7,6 +7,15 @@ import { cn } from "@/lib/utils";
 
 const ZONE = "America/Sao_Paulo";
 const WEEKDAY_LABELS = ["D", "S", "T", "Q", "Q", "S", "S"];
+const MESES = Array.from({ length: 12 }, (_, i) => {
+  const nome = DateTime.fromObject({ month: i + 1, day: 1 })
+    .setLocale("pt-BR")
+    .toFormat("LLLL");
+  return nome.charAt(0).toUpperCase() + nome.slice(1);
+});
+
+const selectClassName =
+  "h-7 rounded-[8px] border border-input bg-transparent px-1.5 text-xs font-medium outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50";
 
 export function MiniCalendar({
   selectedDate,
@@ -30,28 +39,58 @@ export function MiniCalendar({
   }
 
   const today = DateTime.now().setZone(ZONE).startOf("day");
+  const anos = Array.from({ length: 8 }, (_, i) => today.year - 2 + i);
   const startOffset = viewedMonth.weekday % 7;
   const gridStart = viewedMonth.minus({ days: startOffset });
   const days = Array.from({ length: 42 }, (_, i) => gridStart.plus({ days: i }));
 
   return (
     <div className="rounded-[12px] border border-border bg-white p-3">
-      <div className="mb-2 flex items-center justify-between">
+      <div className="mb-2 flex items-center justify-between gap-1">
         <button
           type="button"
           onClick={() => setViewedMonth((m) => m.minus({ months: 1 }))}
-          className="flex size-6 items-center justify-center rounded-[8px] text-muted-foreground hover:bg-muted"
+          className="flex size-6 shrink-0 items-center justify-center rounded-[8px] text-muted-foreground hover:bg-muted"
           aria-label="Mês anterior"
         >
           <ChevronLeft size={16} />
         </button>
-        <span className="text-sm font-medium">
-          {viewedMonth.setLocale("pt-BR").toFormat("LLLL 'de' yyyy")}
-        </span>
+
+        <div className="flex min-w-0 items-center gap-1">
+          <select
+            aria-label="Mês"
+            value={viewedMonth.month}
+            onChange={(event) =>
+              setViewedMonth((m) => m.set({ month: Number(event.target.value) }))
+            }
+            className={selectClassName}
+          >
+            {MESES.map((mes, i) => (
+              <option key={mes} value={i + 1}>
+                {mes}
+              </option>
+            ))}
+          </select>
+          <select
+            aria-label="Ano"
+            value={viewedMonth.year}
+            onChange={(event) =>
+              setViewedMonth((m) => m.set({ year: Number(event.target.value) }))
+            }
+            className={selectClassName}
+          >
+            {anos.map((ano) => (
+              <option key={ano} value={ano}>
+                {ano}
+              </option>
+            ))}
+          </select>
+        </div>
+
         <button
           type="button"
           onClick={() => setViewedMonth((m) => m.plus({ months: 1 }))}
-          className="flex size-6 items-center justify-center rounded-[8px] text-muted-foreground hover:bg-muted"
+          className="flex size-6 shrink-0 items-center justify-center rounded-[8px] text-muted-foreground hover:bg-muted"
           aria-label="Próximo mês"
         >
           <ChevronRight size={16} />

@@ -182,3 +182,12 @@
 .fc-event:hover {
   filter: brightness(0.96);
 }
+
+/* FullCalendar embrulha dayHeaderContent num <a> "cushion" que por padrão é
+   inline-block e encolhe pro tamanho do conteúdo — sem isso, só uma faixa
+   estreita no centro do cabeçalho do dia fica clicável em vez da célula
+   inteira. */
+.fc-col-header-cell-cushion {
+  display: block;
+  width: 100%;
+}
