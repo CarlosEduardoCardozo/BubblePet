@@ -37,7 +37,7 @@ export async function petshopPorSlug(slug: string): Promise<PetshopPublico | nul
   const { data } = await admin
     .from("petshops")
     .select(
-      "id, nome, slug, telefone, endereco, whatsapp_status, horario_abertura, horario_fechamento, dias_funcionamento"
+      "id, nome, slug, telefone, whatsapp_numero, endereco, whatsapp_status, horario_abertura, horario_fechamento, dias_funcionamento"
     )
     .eq("slug", slug)
     .maybeSingle();
@@ -46,7 +46,9 @@ export async function petshopPorSlug(slug: string): Promise<PetshopPublico | nul
     id: data.id,
     nome: data.nome,
     slug: data.slug,
-    telefone: data.telefone,
+    // Contato mostrado pro tutor ("fale com o petshop"): o WhatsApp conectado
+    // é o canal real; o telefone cadastrado é o reserva.
+    telefone: data.whatsapp_numero ?? data.telefone,
     endereco: data.endereco,
     whatsappConectado: data.whatsapp_status === "conectado",
     horario: {

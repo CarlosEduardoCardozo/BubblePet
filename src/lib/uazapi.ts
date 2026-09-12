@@ -113,11 +113,12 @@ export async function statusInstancia(token: string): Promise<StatusInstancia> {
     };
   }>("/instance/status", { method: "GET", token });
 
+  // JID vem como "554799217533:20@s.whatsapp.net" — o ":20" é o id do
+  // aparelho conectado, não faz parte do número.
   const jid = data.status?.jid;
-  const numero =
-    typeof jid === "string"
-      ? jid.split("@")[0]
-      : jid?.user ?? data.instance?.owner?.split("@")[0] ?? null;
+  const bruto =
+    typeof jid === "string" ? jid : (jid?.user ?? data.instance?.owner ?? null);
+  const numero = bruto ? bruto.split("@")[0].split(":")[0] : null;
 
   return {
     connected: !!data.status?.connected,

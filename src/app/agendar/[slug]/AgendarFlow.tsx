@@ -161,8 +161,8 @@ function PassoIdentificacao({ slug, petshop }: { slug: string; petshop: Petshop 
         </button>
         <Titulo>Digite o código</Titulo>
         <p className="text-sm text-muted-foreground">
-          Enviamos 6 dígitos pelo WhatsApp para <span className="font-medium text-foreground">{telefone}</span>.
-          Vale por 5 minutos.
+          Se <span className="font-medium text-foreground">{telefone}</span> estiver cadastrado no{" "}
+          {petshop.nome}, o código de 6 dígitos chega pelo WhatsApp em instantes. Vale por 5 minutos.
         </p>
         <form onSubmit={confirmar} className="mt-4 flex flex-col gap-3">
           <Input
