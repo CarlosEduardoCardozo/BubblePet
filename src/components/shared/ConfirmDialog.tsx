@@ -18,6 +18,8 @@ export function ConfirmDialog({
   onConfirm,
   pending,
   confirmLabel = "Excluir",
+  pendingLabel,
+  confirmVariant = "destructive",
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -26,6 +28,8 @@ export function ConfirmDialog({
   onConfirm: () => void;
   pending: boolean;
   confirmLabel?: string;
+  pendingLabel?: string;
+  confirmVariant?: "destructive" | "default";
 }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -36,10 +40,10 @@ export function ConfirmDialog({
         </DialogHeader>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={pending}>
-            Cancelar
+            Voltar
           </Button>
-          <Button variant="destructive" onClick={onConfirm} disabled={pending}>
-            {pending ? "Excluindo..." : confirmLabel}
+          <Button variant={confirmVariant} onClick={onConfirm} disabled={pending}>
+            {pending ? (pendingLabel ?? "Aguarde...") : confirmLabel}
           </Button>
         </DialogFooter>
       </DialogContent>

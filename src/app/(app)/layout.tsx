@@ -19,21 +19,25 @@ export default async function AppLayout({
 
   const { data: perfil } = await supabase
     .from("perfis")
-    .select("nome, petshops(nome)")
+    .select("nome, petshops(nome, whatsapp_status)")
     .eq("id", user.id)
     .single();
 
-  const petshop = perfil?.petshops as unknown as { nome: string } | null;
+  const petshop = perfil?.petshops as unknown as {
+    nome: string;
+    whatsapp_status: string;
+  } | null;
 
   return (
     <div className="flex min-h-screen bg-gray-50">
       <Sidebar />
-      <div className="flex flex-1 flex-col">
+      <div className="flex min-w-0 flex-1 flex-col">
         <Topbar
           petshopNome={petshop?.nome ?? "BubblePet"}
           donoNome={perfil?.nome ?? user.email ?? ""}
+          whatsappConectado={petshop?.whatsapp_status === "conectado"}
         />
-        <main className="flex-1 p-6">{children}</main>
+        <main className="flex-1 p-4 md:p-6">{children}</main>
       </div>
     </div>
   );

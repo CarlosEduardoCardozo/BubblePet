@@ -6,7 +6,9 @@ import { createClient } from "@/lib/supabase/server";
 
 const schema = z.object({
   email: z.string().email("E-mail inválido"),
-  senha: z.string().min(6, "Senha muito curta"),
+  // Sem regra de tamanho aqui: no login, qualquer senha errada é só
+  // "e-mail ou senha incorretos" — não cabe dizer que é curta.
+  senha: z.string().min(1, "Informe a senha"),
 });
 
 export type LoginState = { error?: string } | undefined;

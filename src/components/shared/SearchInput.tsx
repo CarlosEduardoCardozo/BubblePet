@@ -1,8 +1,8 @@
 "use client";
 
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
-import { useEffect, useState } from "react";
-import { Search } from "lucide-react";
+import { useEffect, useRef, useState, useTransition } from "react";
+import { Loader2, Search, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
 
 export function SearchInput({ placeholder = "Buscar..." }: { placeholder?: string }) {
@@ -10,17 +10,27 @@ export function SearchInput({ placeholder = "Buscar..." }: { placeholder?: strin
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const [value, setValue] = useState(searchParams.get("q") ?? "");
+  const [isPending, startTransition] = useTransition();
+  const primeiraRenderizacao = useRef(true);
 
   useEffect(() => {
+    // Sem isso a página fazia um router.replace no primeiro paint de toda
+    // lista, resetando scroll à toa.
+    if (primeiraRenderizacao.current) {
+      primeiraRenderizacao.current = false;
+      return;
+    }
     const timeout = setTimeout(() => {
       const params = new URLSearchParams(searchParams);
-      if (value) {
-        params.set("q", value);
+      if (value.trim()) {
+        params.set("q", value.trim());
       } else {
         params.delete("q");
       }
       params.delete("page");
-      router.replace(`${pathname}?${params.toString()}`);
+      startTransition(() => {
+        router.replace(`${pathname}?${params.toString()}`);
+      });
     }, 350);
 
     return () => clearTimeout(timeout);
@@ -34,11 +44,31 @@ export function SearchInput({ placeholder = "Buscar..." }: { placeholder?: strin
         className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground"
       />
       <Input
+        type="search"
         value={value}
         onChange={(event) => setValue(event.target.value)}
+        onKeyDown={(event) => {
+          if (event.key === "Escape") setValue("");
+        }}
         placeholder={placeholder}
-        className="pl-8"
+        aria-label={placeholder}
+        className="pl-8 pr-8 [&::-webkit-search-cancel-button]:hidden"
       />
+      {isPending ? (
+        <Loader2
+          size={14}
+          className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 animate-spin text-muted-foreground"
+        />
+      ) : value ? (
+        <button
+          type="button"
+          onClick={() => setValue("")}
+          aria-label="Limpar busca"
+          className="absolute right-2 top-1/2 flex size-5 -translate-y-1/2 items-center justify-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground"
+        >
+          <X size={12} />
+        </button>
+      ) : null}
     </div>
   );
 }

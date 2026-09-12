@@ -24,7 +24,11 @@ import { HorariosDisponiveis } from "./HorariosDisponiveis";
 import { AgendaFilters, EMPTY_FILTERS, type AgendaFiltersState } from "./AgendaFilters";
 import { AgendaToolbar, type AgendaViewType } from "./AgendaToolbar";
 import { nomeFeriado } from "@/lib/feriados-br";
-import type { AgendamentoStatus } from "@/lib/agendamento";
+import {
+  STATUS_COLORS,
+  STATUS_LABELS,
+  type AgendamentoStatus,
+} from "@/lib/agendamento";
 
 // Padrão fixo por enquanto — não existe "horário de funcionamento" por
 // petshop em nenhuma fase do doc. Quando existir, troca por config do banco;
@@ -37,22 +41,9 @@ const HORARIO_FUNCIONAMENTO = {
 
 const ZONE = "America/Sao_Paulo";
 
-// Mantém sincronizado com --status-* em src/app/globals.css.
-export const STATUS_COLORS: Record<AgendamentoStatus, string> = {
-  agendado: "#2563eb",
-  confirmado: "#0d9488",
-  concluido: "#16a34a",
-  cancelado: "#6b7280",
-  faltou: "#dc2626",
-};
-
-export const STATUS_LABELS: Record<AgendamentoStatus, string> = {
-  agendado: "Agendado",
-  confirmado: "Confirmado",
-  concluido: "Concluído",
-  cancelado: "Cancelado",
-  faltou: "Faltou",
-};
+// Cores e rótulos moram em src/lib/agendamento.ts (módulo simples, usado
+// também por server components); re-exportados aqui pelos imports antigos.
+export { STATUS_COLORS, STATUS_LABELS };
 
 export type PetOption = { id: string; nome: string; tutorNome: string };
 export type ServicoOption = { id: string; nome: string; duracao_min: number };

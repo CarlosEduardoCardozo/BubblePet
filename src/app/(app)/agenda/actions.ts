@@ -5,6 +5,9 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentPetshopId } from "@/lib/supabase/petshop";
 import { AGENDAMENTO_STATUSES, type AgendamentoStatus } from "@/lib/agendamento";
+import { mensagemErroBanco } from "@/lib/db-errors";
+import { enviarMensagemWhatsapp } from "@/lib/whatsapp";
+import { templateLembrete } from "@/lib/whatsapp-templates";
 
 type ActionResult = { error: string } | { success: true };
 
@@ -34,11 +37,12 @@ export async function createAgendamento(formData: FormData): Promise<ActionResul
   const supabase = await createClient();
   const petshopId = await getCurrentPetshopId(supabase);
 
-  // A duração vem sempre do serviço no banco — nunca confiamos num "fim"
-  // calculado no cliente.
+  // A duração e o preço vêm sempre do serviço no banco — nunca confiamos num
+  // "fim" ou valor calculado no cliente. O preço fica congelado no
+  // agendamento pra o fechamento do mês não mudar se o serviço for editado.
   const { data: servico, error: servicoError } = await supabase
     .from("servicos")
-    .select("duracao_min")
+    .select("duracao_min, preco_centavos")
     .eq("id", parsed.data.servico_id)
     .single();
   if (servicoError || !servico) {
@@ -48,7 +52,8 @@ export async function createAgendamento(formData: FormData): Promise<ActionResul
   const fim = new Date(inicio.getTime() + servico.duracao_min * 60_000);
 
   // MVP não modela recursos/funcionários em paralelo: um agendamento por
-  // petshop e por horário.
+  // petshop e por horário. A constraint de exclusão no banco é a garantia
+  // final; essa checagem só dá a mensagem antes.
   const { data: conflitos, error: conflitoError } = await supabase
     .from("agendamentos")
     .select("id")
@@ -56,7 +61,7 @@ export async function createAgendamento(formData: FormData): Promise<ActionResul
     .neq("status", "cancelado")
     .lt("inicio", fim.toISOString())
     .gt("fim", inicio.toISOString());
-  if (conflitoError) return { error: conflitoError.message };
+  if (conflitoError) return { error: mensagemErroBanco(conflitoError) };
   if (conflitos && conflitos.length > 0) {
     return { error: "Já existe um agendamento nesse horário." };
   }
@@ -68,10 +73,12 @@ export async function createAgendamento(formData: FormData): Promise<ActionResul
     inicio: inicio.toISOString(),
     fim: fim.toISOString(),
     observacoes: parsed.data.observacoes || null,
+    valor_centavos: servico.preco_centavos,
   });
-  if (error) return { error: error.message };
+  if (error) return { error: mensagemErroBanco(error) };
 
   revalidatePath("/agenda");
+  revalidatePath("/dashboard");
   return { success: true };
 }
 
@@ -103,9 +110,10 @@ export async function createAgendamentoComPlano(
     p_inicio: inicio.toISOString(),
     p_observacoes: parsed.data.observacoes || null,
   });
-  if (error) return { error: error.message };
+  if (error) return { error: mensagemErroBanco(error) };
 
   revalidatePath("/agenda");
+  revalidatePath("/dashboard");
   return { success: true };
 }
 
@@ -122,8 +130,51 @@ export async function updateAgendamentoStatus(
     .from("agendamentos")
     .update({ status })
     .eq("id", id);
-  if (error) return { error: error.message };
+  if (error) return { error: mensagemErroBanco(error) };
 
   revalidatePath("/agenda");
+  revalidatePath("/dashboard");
+  revalidatePath("/financeiro");
   return { success: true };
+}
+
+type Um<T> = T | T[] | null | undefined;
+function um<T>(v: Um<T>): T | undefined {
+  return Array.isArray(v) ? v[0] : (v ?? undefined);
+}
+
+export async function enviarLembrete(agendamentoId: string): Promise<ActionResult> {
+  const supabase = await createClient();
+  const petshopId = await getCurrentPetshopId(supabase);
+
+  const [{ data: ag }, { data: petshop }] = await Promise.all([
+    supabase
+      .from("agendamentos")
+      .select("id, inicio, pets(nome, tutores(id, nome, telefone)), servicos(nome)")
+      .eq("id", agendamentoId)
+      .single(),
+    supabase.from("petshops").select("nome").eq("id", petshopId).single(),
+  ]);
+
+  const pet = um(ag?.pets as Um<{ nome: string; tutores: Um<{ id: string; nome: string; telefone: string }> }>);
+  const tutor = um(pet?.tutores);
+  const servico = um(ag?.servicos as Um<{ nome: string }>);
+  if (!ag || !pet || !tutor || !servico || !petshop) {
+    return { error: "Agendamento não encontrado." };
+  }
+
+  const resultado = await enviarMensagemWhatsapp({
+    petshopId,
+    tutorId: tutor.id,
+    numeroE164: tutor.telefone,
+    tipo: "lembrete",
+    texto: templateLembrete({
+      petshopNome: petshop.nome,
+      tutorNome: tutor.nome,
+      petNome: pet.nome,
+      servicoNome: servico.nome,
+      inicioISO: ag.inicio,
+    }),
+  });
+  return resultado.ok ? { success: true } : { error: resultado.erro };
 }
