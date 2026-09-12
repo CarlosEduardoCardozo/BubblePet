@@ -143,6 +143,90 @@ function um<T>(v: Um<T>): T | undefined {
   return Array.isArray(v) ? v[0] : (v ?? undefined);
 }
 
+/**
+ * Edita horário, serviço e observações. Agendamento pago com plano só muda
+ * de horário (o crédito está amarrado ao serviço do plano). A duração e o
+ * preço sempre vêm do serviço no banco.
+ */
+export async function updateAgendamento(
+  id: string,
+  dados: { inicio: string; servicoId: string; observacoes: string }
+): Promise<ActionResult> {
+  const inicio = new Date(dados.inicio);
+  if (Number.isNaN(inicio.getTime())) return { error: "Horário inválido" };
+  if (!dados.servicoId) return { error: "Selecione o serviço" };
+
+  const supabase = await createClient();
+  const petshopId = await getCurrentPetshopId(supabase);
+
+  const { data: atual } = await supabase
+    .from("agendamentos")
+    .select("id, servico_id, origem_plano, status")
+    .eq("id", id)
+    .maybeSingle();
+  if (!atual) return { error: "Agendamento não encontrado." };
+  if (atual.status === "concluido" || atual.status === "cancelado") {
+    return { error: "Agendamento encerrado não pode ser alterado." };
+  }
+  if (atual.origem_plano && dados.servicoId !== atual.servico_id) {
+    return { error: "Esse atendimento usa crédito do plano — dá pra mudar o horário, não o serviço." };
+  }
+
+  const { data: servico } = await supabase
+    .from("servicos")
+    .select("duracao_min, preco_centavos")
+    .eq("id", dados.servicoId)
+    .maybeSingle();
+  if (!servico) return { error: "Serviço não encontrado" };
+
+  const fim = new Date(inicio.getTime() + servico.duracao_min * 60_000);
+
+  const { data: conflitos, error: conflitoError } = await supabase
+    .from("agendamentos")
+    .select("id")
+    .eq("petshop_id", petshopId)
+    .neq("id", id)
+    .neq("status", "cancelado")
+    .lt("inicio", fim.toISOString())
+    .gt("fim", inicio.toISOString());
+  if (conflitoError) return { error: mensagemErroBanco(conflitoError) };
+  if (conflitos && conflitos.length > 0) {
+    return { error: "Já existe um agendamento nesse horário." };
+  }
+
+  const { error } = await supabase
+    .from("agendamentos")
+    .update({
+      inicio: inicio.toISOString(),
+      fim: fim.toISOString(),
+      servico_id: dados.servicoId,
+      observacoes: dados.observacoes.trim() || null,
+      valor_centavos: atual.origem_plano ? 0 : servico.preco_centavos,
+    })
+    .eq("id", id);
+  if (error) return { error: mensagemErroBanco(error) };
+
+  revalidatePath("/agenda");
+  revalidatePath("/dashboard");
+  return { success: true };
+}
+
+/** Arrastar na grade: só o horário muda. */
+export async function moverAgendamento(id: string, inicioISO: string): Promise<ActionResult> {
+  const supabase = await createClient();
+  const { data: atual } = await supabase
+    .from("agendamentos")
+    .select("servico_id, observacoes")
+    .eq("id", id)
+    .maybeSingle();
+  if (!atual) return { error: "Agendamento não encontrado." };
+  return updateAgendamento(id, {
+    inicio: inicioISO,
+    servicoId: atual.servico_id,
+    observacoes: atual.observacoes ?? "",
+  });
+}
+
 export async function enviarLembrete(agendamentoId: string): Promise<ActionResult> {
   const supabase = await createClient();
   const petshopId = await getCurrentPetshopId(supabase);

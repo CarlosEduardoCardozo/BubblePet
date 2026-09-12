@@ -2,7 +2,7 @@
 
 import { useCallback, useState, useRef } from "react";
 import { DateTime } from "luxon";
-import { Plus, Gift, SlidersHorizontal } from "lucide-react";
+import { Plus, Gift, SlidersHorizontal, PawPrint } from "lucide-react";
 import FullCalendar from "@fullcalendar/react";
 import timeGridPlugin from "@fullcalendar/timegrid";
 import interactionPlugin from "@fullcalendar/interaction";
@@ -13,6 +13,7 @@ import type {
   DateSelectArg,
   DatesSetArg,
   EventContentArg,
+  EventDropArg,
   DayHeaderContentArg,
 } from "@fullcalendar/core";
 import { toast } from "sonner";
@@ -28,12 +29,8 @@ import { AgendaFilters, EMPTY_FILTERS, type AgendaFiltersState } from "./AgendaF
 import { AgendaToolbar, type AgendaViewType } from "./AgendaToolbar";
 import { nomeFeriado } from "@/lib/feriados-br";
 import { ZONE, type HorarioFuncionamento } from "@/lib/agenda/slots";
-import {
-  AGENDAMENTO_STATUSES,
-  STATUS_COLORS,
-  STATUS_LABELS,
-  type AgendamentoStatus,
-} from "@/lib/agendamento";
+import { moverAgendamento } from "@/app/(app)/agenda/actions";
+import { STATUS_COLORS, STATUS_LABELS, type AgendamentoStatus } from "@/lib/agendamento";
 
 // Cores e rótulos moram em src/lib/agendamento.ts (módulo simples, usado
 // também por server components); re-exportados aqui pelos imports antigos.
@@ -62,20 +59,32 @@ export type AgendamentoEvent = {
   valorCentavos: number | null;
 };
 
+function hm(valor: string): { hour: number; minute: number } {
+  const [h, m] = valor.split(":").map(Number);
+  return { hour: h ?? 0, minute: m ?? 0 };
+}
+
 function proximoSlotPadrao(referencia: Date, horario: HorarioFuncionamento): Date {
   const agora = DateTime.now().setZone(ZONE);
   const dia = DateTime.fromJSDate(referencia).setZone(ZONE).startOf("day");
-  const [hAb, mAb] = horario.abertura.split(":").map(Number);
-  const [hFe] = horario.fechamento.split(":").map(Number);
+  const abertura = hm(horario.abertura);
+  const fechamento = hm(horario.fechamento);
 
   if (dia.hasSame(agora, "day")) {
     const minuto = agora.minute < 30 ? 30 : 0;
     const hora = agora.minute < 30 ? agora.hour : agora.hour + 1;
     const candidato = agora.set({ hour: hora, minute: minuto, second: 0, millisecond: 0 });
-    if (candidato.hour >= (hAb ?? 8) && candidato.hour < (hFe ?? 18)) return candidato.toJSDate();
+    if (candidato.hour >= abertura.hour && candidato.hour < fechamento.hour) return candidato.toJSDate();
   }
 
-  return dia.set({ hour: hAb ?? 8, minute: mAb ?? 0 }).toJSDate();
+  return dia.set(abertura).toJSDate();
+}
+
+/** "08:00" -> "07:00:00": a grade mostra 1h antes de abrir e 1h depois de fechar. */
+function comFolga(valor: string, horas: number): string {
+  const { hour, minute } = hm(valor);
+  const h = Math.min(24, Math.max(0, hour + horas));
+  return `${String(h).padStart(2, "0")}:${String(minute).padStart(2, "0")}:00`;
 }
 
 export function AgendaView({
@@ -95,6 +104,7 @@ export function AgendaView({
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [filters, setFilters] = useState<AgendaFiltersState>(EMPTY_FILTERS);
   const [mostrarFiltros, setMostrarFiltros] = useState(false);
+  const [painelAberto, setPainelAberto] = useState(true);
   const [viewTitle, setViewTitle] = useState("");
   const [viewType, setViewType] = useState<AgendaViewType>("timeGridWeek");
   const rangeRef = useRef<{ start: Date; end: Date } | null>(null);
@@ -166,6 +176,28 @@ export function AgendaView({
     setDetalheId(arg.event.id);
   }
 
+  function handleEventDrop(arg: EventDropArg) {
+    const inicio = arg.event.start;
+    if (!inicio) {
+      arg.revert();
+      return;
+    }
+    // Otimista: o FullCalendar já moveu o cartão; se o servidor recusar,
+    // volta pro lugar e explica.
+    void (async () => {
+      const result = await moverAgendamento(arg.event.id, inicio.toISOString());
+      if ("error" in result) {
+        arg.revert();
+        toast.error(result.error);
+      } else {
+        toast.success(
+          `Reagendado para ${DateTime.fromJSDate(inicio).setZone(ZONE).setLocale("pt-BR").toFormat("ccc dd/LL 'às' HH:mm")}.`
+        );
+        reload();
+      }
+    })();
+  }
+
   function handleSelectDate(date: Date) {
     setSelectedDate(date);
     calendarRef.current?.getApi().gotoDate(date);
@@ -178,21 +210,29 @@ export function AgendaView({
   }
 
   function renderEventContent(arg: EventContentArg) {
-    const status = arg.event.extendedProps.status as AgendamentoStatus;
     const plano = arg.event.extendedProps.origemPlano as boolean;
+    const servico = arg.event.extendedProps.servicoNome as string;
+    const curto = arg.event.end && arg.event.start
+      ? arg.event.end.getTime() - arg.event.start.getTime() <= 30 * 60_000
+      : false;
     return (
-      <div className="flex h-full flex-col gap-0.5 overflow-hidden px-1.5 py-1 text-xs">
-        <div className="flex items-center gap-1 font-semibold text-foreground">
-          <span
-            className="size-1.5 shrink-0 rounded-full"
-            style={{ backgroundColor: STATUS_COLORS[status] }}
-          />
-          <span className="truncate">{arg.event.title}</span>
+      <div className="flex h-full min-w-0 items-start gap-1 overflow-hidden px-1.5 py-0.5 leading-tight">
+        <div className="min-w-0 flex-1">
+          <div className="truncate text-[12px] font-semibold">
+            {arg.event.title}
+            {curto && (
+              <span className="ml-1 font-normal text-muted-foreground">{arg.timeText}</span>
+            )}
+          </div>
+          {!curto && (
+            <div className="truncate text-[11px] text-muted-foreground">
+              {servico} · {arg.timeText}
+            </div>
+          )}
         </div>
-        <span className="truncate text-muted-foreground">
-          {arg.timeText}
-          {plano && " · plano"}
-        </span>
+        {plano && (
+          <PawPrint size={11} className="mt-0.5 shrink-0 text-primary" aria-label="Coberto pelo plano" />
+        )}
       </div>
     );
   }
@@ -203,7 +243,7 @@ export function AgendaView({
     const isSelecionado = dia.hasSame(DateTime.fromJSDate(selectedDate).setZone(ZONE), "day");
     const isHoje = dia.hasSame(DateTime.now().setZone(ZONE), "day");
     const ehVisaoDia = arg.view.type === "timeGridDay";
-    const weekdayLabel = dia.toFormat(ehVisaoDia ? "cccc" : "ccc");
+    const weekdayLabel = dia.toFormat(ehVisaoDia ? "cccc" : "ccc").replace(".", "");
 
     return (
       <button
@@ -213,16 +253,15 @@ export function AgendaView({
         // que faz seu próprio hit-test por coordenada e interpreta o clique
         // no cabeçalho como um "select" na grade.
         onMouseDown={(event) => event.stopPropagation()}
-        className="flex w-full flex-col items-center gap-1 py-1.5"
+        className={cn(
+          "flex w-full items-center justify-center gap-1.5 py-1.5",
+          ehVisaoDia && "gap-2"
+        )}
         title={feriado ?? undefined}
       >
-        <span className="flex items-center gap-1 text-xs font-medium text-muted-foreground">
-          {ehVisaoDia ? weekdayLabel : weekdayLabel.toUpperCase()}
-          {feriado && <Gift size={11} className="text-primary" />}
-        </span>
         <span
           className={cn(
-            "flex size-7 items-center justify-center rounded-md text-base font-semibold",
+            "flex size-7 items-center justify-center rounded-md text-sm font-semibold",
             isSelecionado
               ? "bg-primary text-primary-foreground"
               : isHoje
@@ -232,6 +271,10 @@ export function AgendaView({
         >
           {dia.day}
         </span>
+        <span className={cn("text-xs font-medium uppercase", isHoje ? "text-primary" : "text-muted-foreground")}>
+          {weekdayLabel}
+        </span>
+        {feriado && <Gift size={11} className="text-primary" />}
       </button>
     );
   }
@@ -239,7 +282,8 @@ export function AgendaView({
   const filtrosAtivos = !!(filters.status || filters.petId || filters.servicoId);
   const filteredEvents = events.filter(
     (event) =>
-      (!filters.status || event.status === filters.status) &&
+      // Cancelados só aparecem quando o filtro pede: ocupam espaço à toa.
+      (filters.status ? event.status === filters.status : event.status !== "cancelado") &&
       (!filters.petId || event.petId === filters.petId) &&
       (!filters.servicoId || event.servicoId === filters.servicoId)
   );
@@ -258,11 +302,15 @@ export function AgendaView({
     endTime: horario.fechamento,
   };
 
+  const agora = DateTime.now().setZone(ZONE);
+  const scrollTime = agora.hour >= hm(horario.abertura).hour
+    ? agora.minus({ hours: 1 }).toFormat("HH:00:00")
+    : comFolga(horario.abertura, 0);
+
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex h-[calc(100dvh-3.5rem-2rem)] min-h-[520px] flex-col gap-3 md:h-[calc(100dvh-3.5rem-3rem)]">
       <PageHeader
         title="Agenda"
-        description="Clique num horário livre da grade ou no painel ao lado para marcar."
         action={
           <>
             <Button
@@ -285,81 +333,95 @@ export function AgendaView({
         </div>
       )}
 
-      <div className="flex gap-4">
-        <aside className="hidden w-64 shrink-0 flex-col gap-4 xl:flex">
-          <MiniCalendar selectedDate={selectedDate} onSelectDate={handleSelectDate} />
-          <HorariosDisponiveis
-            selectedDate={selectedDate}
-            horario={horario}
-            ocupados={ocupados}
-            duracaoMin={duracaoMinima}
-            onSelectSlot={(start) => setNovoSlot({ start })}
-          />
-          <AgendaFilters filters={filters} onChange={setFilters} pets={pets} servicos={servicos} />
-        </aside>
+      <div className="flex min-h-0 flex-1 gap-3">
+        {painelAberto && (
+          <aside className="hidden w-64 shrink-0 flex-col gap-3 overflow-y-auto xl:flex">
+            <MiniCalendar selectedDate={selectedDate} onSelectDate={handleSelectDate} />
+            <HorariosDisponiveis
+              selectedDate={selectedDate}
+              horario={horario}
+              ocupados={ocupados}
+              duracaoMin={duracaoMinima}
+              onSelectSlot={(start) => setNovoSlot({ start })}
+            />
+            <AgendaFilters filters={filters} onChange={setFilters} pets={pets} servicos={servicos} />
+          </aside>
+        )}
 
         <div
           className={cn(
-            "min-w-0 flex-1 rounded-[12px] border border-border bg-white p-3 transition-opacity sm:p-4",
-            carregando && "opacity-60"
+            "flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-[12px] border border-border bg-white transition-opacity",
+            carregando && "opacity-70"
           )}
           aria-busy={carregando}
         >
           <AgendaToolbar
             title={viewTitle}
             view={viewType}
+            painelAberto={painelAberto}
             onPrev={() => calendarRef.current?.getApi().prev()}
             onNext={() => calendarRef.current?.getApi().next()}
             onToday={() => calendarRef.current?.getApi().today()}
             onChangeView={(view) => calendarRef.current?.getApi().changeView(view)}
+            onTogglePainel={() => setPainelAberto((v) => !v)}
           />
-          <FullCalendar
-            ref={calendarRef}
-            plugins={[timeGridPlugin, interactionPlugin, luxon3Plugin]}
-            timeZone={ZONE}
-            initialView="timeGridWeek"
-            headerToolbar={false}
-            businessHours={businessHours}
-            locale={ptBrLocale}
-            firstDay={1}
-            slotMinTime="06:30:00"
-            slotMaxTime="21:00:00"
-            slotDuration="00:10:00"
-            slotLabelInterval="00:30:00"
-            allDaySlot={false}
-            selectable
-            selectMirror
-            nowIndicator
-            height="auto"
-            datesSet={handleDatesSet}
-            select={handleSelect}
-            eventClick={handleEventClick}
-            eventContent={renderEventContent}
-            dayHeaderContent={renderDayHeader}
-            events={filteredEvents.map((e) => ({
-              id: e.id,
-              title: `${e.petNome} · ${e.servicoNome}`,
-              start: e.inicio,
-              end: e.fim,
-              backgroundColor: `${STATUS_COLORS[e.status]}29`,
-              borderColor: STATUS_COLORS[e.status],
-              extendedProps: { status: e.status, origemPlano: e.origemPlano },
-            }))}
-          />
-          <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-border pt-3 text-xs text-muted-foreground">
-            {AGENDAMENTO_STATUSES.map((status) => (
-              <span key={status} className="flex items-center gap-1.5">
-                <span
-                  className="size-2 rounded-full"
-                  style={{ backgroundColor: STATUS_COLORS[status] }}
-                />
-                {STATUS_LABELS[status]}
-              </span>
-            ))}
-            {filtrosAtivos && (
-              <span className="ml-auto text-primary">Filtros aplicados à semana visível</span>
-            )}
+          <div className="min-h-0 flex-1 p-2 sm:p-3 [&_.fc]:h-full">
+            <FullCalendar
+              ref={calendarRef}
+              plugins={[timeGridPlugin, interactionPlugin, luxon3Plugin]}
+              timeZone={ZONE}
+              initialView="timeGridWeek"
+              headerToolbar={false}
+              businessHours={businessHours}
+              locale={ptBrLocale}
+              firstDay={1}
+              slotMinTime={comFolga(horario.abertura, -1)}
+              slotMaxTime={comFolga(horario.fechamento, 1)}
+              slotDuration="00:15:00"
+              slotLabelInterval="01:00:00"
+              slotLabelFormat={{ hour: "2-digit", minute: "2-digit", hour12: false }}
+              snapDuration="00:15:00"
+              scrollTime={scrollTime}
+              scrollTimeReset={false}
+              allDaySlot={false}
+              selectable
+              selectMirror
+              editable
+              eventDurationEditable={false}
+              eventOverlap={false}
+              slotEventOverlap={false}
+              nowIndicator
+              height="100%"
+              expandRows={false}
+              datesSet={handleDatesSet}
+              select={handleSelect}
+              eventClick={handleEventClick}
+              eventDrop={handleEventDrop}
+              eventContent={renderEventContent}
+              dayHeaderContent={renderDayHeader}
+              events={filteredEvents.map((e) => ({
+                id: e.id,
+                title: e.petNome,
+                start: e.inicio,
+                end: e.fim,
+                classNames: [`bp-status-${e.status}`],
+                editable: e.status === "agendado" || e.status === "confirmado",
+                extendedProps: {
+                  status: e.status,
+                  origemPlano: e.origemPlano,
+                  servicoNome: e.servicoNome,
+                },
+              }))}
+            />
           </div>
+          {filtrosAtivos && (
+            <div className="border-t border-border px-4 py-1.5 text-xs text-primary">
+              Filtros aplicados à semana visível ·{" "}
+              <button type="button" className="underline" onClick={() => setFilters(EMPTY_FILTERS)}>
+                limpar
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
@@ -381,6 +443,9 @@ export function AgendaView({
         open={!!detalhe}
         onOpenChange={(open) => !open && setDetalheId(null)}
         agendamento={detalhe}
+        servicos={servicos}
+        horario={horario}
+        ocupados={ocupados}
         onChanged={() => {
           setDetalheId(null);
           reload();

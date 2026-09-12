@@ -174,13 +174,93 @@
   ) !important;
 }
 
-.fc-event {
-  border-radius: 8px;
-  transition: filter 0.15s ease;
+/* Tema da grade: linhas mais suaves, "hoje" em teal claro, indicador de agora
+   em teal, rótulos de hora pequenos e o cabeçalho dos dias fixo no scroll
+   interno. */
+.fc {
+  --fc-border-color: oklch(0.94 0 0);
+  --fc-today-bg-color: color-mix(in srgb, var(--primary) 6%, white);
+  --fc-now-indicator-color: var(--primary);
+  --fc-highlight-color: color-mix(in srgb, var(--primary) 14%, white);
+  --fc-page-bg-color: #fff;
+  --fc-event-border-color: transparent;
+  --fc-event-text-color: var(--foreground);
+  --fc-small-font-size: 0.75rem;
+  font-size: 0.8125rem;
 }
 
-.fc-event:hover {
-  filter: brightness(0.96);
+/* 15 min por linha, compacta: 1h = 72px. */
+.fc .fc-timegrid-slot {
+  height: 18px;
+}
+
+.fc .fc-timegrid-slot-label-cushion,
+.fc .fc-timegrid-axis-cushion {
+  font-size: 11px;
+  color: var(--muted-foreground);
+  padding-right: 8px;
+}
+
+/* Linha da meia-hora mais fraca que a da hora cheia. */
+.fc .fc-timegrid-slot-minor {
+  border-top-style: dotted;
+}
+
+.fc .fc-col-header-cell {
+  border-bottom-width: 1px;
+}
+
+.fc .fc-scrollgrid {
+  border-width: 0;
+}
+
+.fc .fc-scrollgrid-section-header > * {
+  border-right-width: 0;
+}
+
+/* Cartão de evento: barra na cor do status à esquerda, fundo tingido. */
+.fc .fc-timegrid-event {
+  --bp-color: var(--status-agendado);
+  border-radius: 6px;
+  border: 0;
+  border-left: 3px solid var(--bp-color);
+  background: color-mix(in srgb, var(--bp-color) 12%, white);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.06);
+  transition: filter 0.15s ease, box-shadow 0.15s ease;
+}
+
+.fc .fc-timegrid-event:hover {
+  filter: brightness(0.97);
+  box-shadow: 0 2px 8px rgb(0 0 0 / 0.12);
+}
+
+.fc .fc-timegrid-event .fc-event-main {
+  padding: 0;
+}
+
+.fc .bp-status-agendado { --bp-color: var(--status-agendado); }
+.fc .bp-status-confirmado { --bp-color: var(--status-confirmado); }
+.fc .bp-status-concluido { --bp-color: var(--status-concluido); }
+.fc .bp-status-cancelado { --bp-color: var(--status-cancelado); opacity: 0.6; }
+.fc .bp-status-faltou { --bp-color: var(--status-faltou); }
+
+.fc .fc-event-dragging {
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.18);
+}
+
+/* Enquanto arrasta, o "fantasma" do evento fica na cor primária. */
+.fc .fc-event-mirror {
+  --bp-color: var(--primary);
+}
+
+.fc .fc-timegrid-now-indicator-line {
+  border-width: 2px 0 0;
+}
+
+.fc .fc-timegrid-now-indicator-arrow {
+  border-width: 5px 0 5px 6px;
+  border-top-color: transparent;
+  border-bottom-color: transparent;
 }
 
 /* FullCalendar embrulha dayHeaderContent num <a> "cushion" que por padrão é
