@@ -4,6 +4,8 @@ import { useEffect, useState, useTransition } from "react";
 import { DateTime } from "luxon";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
+import { FormSelect } from "@/components/shared/FormSelect";
 import { createClient } from "@/lib/supabase/client";
 import { assinarPlano, cancelarAssinatura } from "./planos-actions";
 
@@ -13,25 +15,28 @@ type AssinaturaInfo = {
   id: string;
   planoNome: string;
   creditosMes: number;
-  usados: number;
+  saldo: number;
 };
+
+type Estado = { tipo: "carregando" } | { tipo: "erro" } | { tipo: "ok"; assinatura: AssinaturaInfo | null };
 
 export function AssinaturaSection({
   petId,
+  petNome,
   planos,
 }: {
   petId: string;
+  petNome?: string;
   planos: PlanoOption[];
 }) {
-  const [assinatura, setAssinatura] = useState<AssinaturaInfo | null | undefined>(
-    undefined
-  );
+  const [estado, setEstado] = useState<Estado>({ tipo: "carregando" });
   const [selectedPlano, setSelectedPlano] = useState("");
+  const [confirmCancelar, setConfirmCancelar] = useState(false);
   const [isPending, startTransition] = useTransition();
 
   async function carregar() {
     const supabase = createClient();
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("assinaturas")
       .select("id, planos(nome, creditos_mes)")
       .eq("pet_id", petId)
@@ -39,12 +44,19 @@ export function AssinaturaSection({
       .order("criado_em", { ascending: false })
       .limit(1);
 
-    const row = data?.[0] as
+    if (error) {
+      setEstado({ tipo: "erro" });
+      return;
+    }
+
+    // planos é many-to-one (objeto) na API real; a inferência do supabase-js
+    // sem tipos gerados acha que é array.
+    const row = data?.[0] as unknown as
       | { id: string; planos: { nome: string; creditos_mes: number } | null }
       | undefined;
 
     if (!row) {
-      setAssinatura(null);
+      setEstado({ tipo: "ok", assinatura: null });
       return;
     }
 
@@ -59,13 +71,14 @@ export function AssinaturaSection({
       .eq("competencia", competencia)
       .maybeSingle();
 
-    const creditosMes = row.planos?.creditos_mes ?? 0;
-    const saldo = saldoRow?.saldo ?? 0;
-    setAssinatura({
-      id: row.id,
-      planoNome: row.planos?.nome ?? "",
-      creditosMes,
-      usados: Math.max(0, creditosMes - saldo),
+    setEstado({
+      tipo: "ok",
+      assinatura: {
+        id: row.id,
+        planoNome: row.planos?.nome ?? "",
+        creditosMes: row.planos?.creditos_mes ?? 0,
+        saldo: saldoRow?.saldo ?? 0,
+      },
     });
   }
 
@@ -75,83 +88,103 @@ export function AssinaturaSection({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [petId]);
 
-  function handleAssinar() {
-    if (!selectedPlano) return;
+  function handleAssinar(planoId: string) {
+    if (!planoId) return;
+    setSelectedPlano(planoId);
     startTransition(async () => {
-      const result = await assinarPlano(petId, selectedPlano);
+      const result = await assinarPlano(petId, planoId);
       if ("error" in result) {
         toast.error(result.error);
       } else {
-        toast.success("Plano assinado.");
-        setSelectedPlano("");
-        void carregar();
+        toast.success("Plano ativado. Os créditos deste mês já estão disponíveis.");
       }
+      setSelectedPlano("");
+      void carregar();
     });
   }
 
   function handleCancelar() {
-    if (!assinatura) return;
+    if (estado.tipo !== "ok" || !estado.assinatura) return;
+    const id = estado.assinatura.id;
     startTransition(async () => {
-      const result = await cancelarAssinatura(assinatura.id);
+      const result = await cancelarAssinatura(id);
+      setConfirmCancelar(false);
       if ("error" in result) {
         toast.error(result.error);
       } else {
-        toast.success("Assinatura cancelada.");
+        toast.success("Plano cancelado.");
         void carregar();
       }
     });
   }
 
-  if (assinatura === undefined) {
-    return <p className="text-xs text-muted-foreground">Carregando plano...</p>;
+  if (estado.tipo === "carregando") {
+    return <div className="h-8 animate-pulse rounded-[8px] bg-muted" aria-label="Carregando plano" />;
   }
 
-  if (assinatura) {
+  if (estado.tipo === "erro") {
     return (
-      <div className="flex items-center justify-between rounded-[12px] bg-primary/5 px-2.5 py-1.5 text-xs">
-        <span>
-          <span className="font-medium text-primary">{assinatura.planoNome}</span>
-          {" — "}
-          {assinatura.usados} de {assinatura.creditosMes} usados este mês
-        </span>
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          disabled={isPending}
-          onClick={handleCancelar}
-        >
-          Cancelar
-        </Button>
-      </div>
+      <p className="text-xs text-destructive">
+        Não foi possível carregar o plano.{" "}
+        <button type="button" className="underline" onClick={() => void carregar()}>
+          Tentar de novo
+        </button>
+      </p>
     );
   }
 
-  if (planos.length === 0) return null;
+  const { assinatura } = estado;
+
+  if (assinatura) {
+    return (
+      <>
+        <div className="flex items-center justify-between gap-2 rounded-[12px] bg-primary/5 px-2.5 py-1.5 text-xs">
+          <span>
+            <span className="font-medium text-primary">{assinatura.planoNome}</span>
+            {" — "}
+            {assinatura.saldo} de {assinatura.creditosMes} créditos restantes
+          </span>
+          <Button
+            type="button"
+            variant="ghost"
+            size="xs"
+            className="text-muted-foreground"
+            disabled={isPending}
+            onClick={() => setConfirmCancelar(true)}
+          >
+            Cancelar plano
+          </Button>
+        </div>
+        <ConfirmDialog
+          open={confirmCancelar}
+          onOpenChange={setConfirmCancelar}
+          title={`Cancelar o plano de ${petNome ?? "este pet"}?`}
+          description="Os créditos restantes deste mês são perdidos e a mensalidade deixa de entrar no fechamento. Dá pra assinar de novo depois."
+          confirmLabel="Cancelar plano"
+          pendingLabel="Cancelando..."
+          onConfirm={handleCancelar}
+          pending={isPending}
+        />
+      </>
+    );
+  }
+
+  if (planos.length === 0) {
+    return <p className="text-xs text-muted-foreground">Sem plano. Cadastre planos em Planos.</p>;
+  }
 
   return (
-    <div className="flex items-center gap-2">
-      <select
-        value={selectedPlano}
-        onChange={(event) => setSelectedPlano(event.target.value)}
-        className="h-7 flex-1 rounded-[12px] border border-input bg-transparent px-2 text-xs outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
-      >
-        <option value="">Assinar um plano...</option>
-        {planos.map((plano) => (
-          <option key={plano.id} value={plano.id}>
-            {plano.nome} ({plano.creditos_mes}/mês)
-          </option>
-        ))}
-      </select>
-      <Button
-        type="button"
-        variant="outline"
-        size="sm"
-        disabled={!selectedPlano || isPending}
-        onClick={handleAssinar}
-      >
-        Assinar
-      </Button>
-    </div>
+    <FormSelect
+      value={selectedPlano}
+      onValueChange={handleAssinar}
+      disabled={isPending}
+      placeholder={isPending ? "Ativando..." : "Sem plano — ativar um plano..."}
+      className="h-8 text-xs"
+      options={planos.map((plano) => ({
+        value: plano.id,
+        label: plano.nome,
+        hint: `${plano.creditos_mes} banho${plano.creditos_mes === 1 ? "" : "s"} por mês`,
+      }))}
+    />
   );
 }

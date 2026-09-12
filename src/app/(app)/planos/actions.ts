@@ -4,6 +4,7 @@ import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentPetshopId } from "@/lib/supabase/petshop";
+import { mensagemErroBanco } from "@/lib/db-errors";
 import { parseCentavos } from "@/lib/currency";
 
 type ActionResult = { error: string } | { success: true };
@@ -71,7 +72,7 @@ export async function createPlano(formData: FormData): Promise<ActionResult> {
   const { error } = await supabase
     .from("planos")
     .insert({ ...parsed.data, petshop_id: petshopId });
-  if (error) return { error: error.message };
+  if (error) return { error: mensagemErroBanco(error) };
 
   revalidatePath("/planos");
   return { success: true };
@@ -86,7 +87,7 @@ export async function updatePlano(
 
   const supabase = await createClient();
   const { error } = await supabase.from("planos").update(parsed.data).eq("id", id);
-  if (error) return { error: error.message };
+  if (error) return { error: mensagemErroBanco(error) };
 
   revalidatePath("/planos");
   return { success: true };
@@ -98,7 +99,7 @@ export async function deletePlano(id: string): Promise<ActionResult> {
     .from("planos")
     .update({ ativo: false })
     .eq("id", id);
-  if (error) return { error: error.message };
+  if (error) return { error: mensagemErroBanco(error) };
 
   revalidatePath("/planos");
   return { success: true };

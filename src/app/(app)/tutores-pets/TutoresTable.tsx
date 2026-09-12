@@ -1,8 +1,10 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import Link from "next/link";
+import { DateTime } from "luxon";
 import { toast } from "sonner";
-import { Plus, PawPrint, Pencil, Trash2 } from "lucide-react";
+import { Plus, PawPrint, Pencil, Trash2, SearchX, Users } from "lucide-react";
 import {
   Table,
   TableHeader,
@@ -13,6 +15,8 @@ import {
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { PageHeader } from "@/components/shared/PageHeader";
+import { EmptyState } from "@/components/shared/EmptyState";
 import { SearchInput } from "@/components/shared/SearchInput";
 import { Pagination } from "@/components/shared/Pagination";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
@@ -20,6 +24,8 @@ import { formatPhoneBR } from "@/lib/phone";
 import { TutorSheet } from "./TutorSheet";
 import { PetsSheet } from "./PetsSheet";
 import { deleteTutor } from "./actions";
+
+const ZONE = "America/Sao_Paulo";
 
 export type Pet = {
   id: string;
@@ -57,17 +63,32 @@ export type Tutor = {
   cpf: string | null;
   observacoes: string | null;
   pets: Pet[];
+  proximoAgendamento?: string | null;
 };
 
 export type PlanoOption = { id: string; nome: string; creditos_mes: number };
 
+function formatProximo(iso: string): string {
+  const dt = DateTime.fromISO(iso).setZone(ZONE).setLocale("pt-BR");
+  const hoje = DateTime.now().setZone(ZONE);
+  if (dt.hasSame(hoje, "day")) return `Hoje às ${dt.toFormat("HH:mm")}`;
+  if (dt.hasSame(hoje.plus({ days: 1 }), "day")) return `Amanhã às ${dt.toFormat("HH:mm")}`;
+  return dt.toFormat("dd/LL 'às' HH:mm");
+}
+
 export function TutoresTable({
   tutores,
+  totalTutores,
+  totalPets,
+  busca,
   page,
   totalPages,
   planos,
 }: {
   tutores: Tutor[];
+  totalTutores: number;
+  totalPets: number;
+  busca: string;
   page: number;
   totalPages: number;
   planos: PlanoOption[];
@@ -86,7 +107,7 @@ export function TutoresTable({
 
   function handleDelete() {
     if (!deletingTutorId) return;
-    const nome = deletingTutor?.nome ?? "Tutor";
+    const nome = deletingTutor?.nome ?? "Cliente";
     startTransition(async () => {
       const result = await deleteTutor(deletingTutorId);
       if ("error" in result) {
@@ -98,34 +119,58 @@ export function TutoresTable({
     });
   }
 
+  const subtitulo =
+    totalTutores === 0
+      ? "Nenhum cliente cadastrado"
+      : `${totalTutores} cliente${totalTutores === 1 ? "" : "s"} · ${totalPets} pet${totalPets === 1 ? "" : "s"}`;
+
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <h1 className="text-2xl font-semibold">Tutores & Pets</h1>
-        <Button onClick={() => setFormTarget("new")}>
-          <Plus size={16} /> Novo tutor
-        </Button>
-      </div>
+      <PageHeader
+        title="Clientes e pets"
+        description={subtitulo}
+        action={
+          <Button onClick={() => setFormTarget("new")}>
+            <Plus size={16} /> Novo cliente
+          </Button>
+        }
+      />
 
-      <SearchInput placeholder="Buscar por nome..." />
+      <SearchInput placeholder="Buscar por nome ou telefone..." />
 
       {tutores.length === 0 ? (
-        <div className="flex flex-col items-center gap-3 rounded-[12px] border border-dashed border-border py-16 text-center">
-          <p className="text-muted-foreground">Nenhum tutor cadastrado ainda.</p>
-          <Button onClick={() => setFormTarget("new")}>
-            <Plus size={16} /> Cadastrar o primeiro tutor
-          </Button>
-        </div>
+        busca ? (
+          <EmptyState
+            icon={SearchX}
+            title={`Nenhum cliente encontrado para “${busca}”`}
+            description="Confira a grafia ou tente buscar pelo telefone."
+            action={
+              <Button variant="outline" nativeButton={false} render={<Link href="/tutores-pets" />}>
+                Limpar busca
+              </Button>
+            }
+          />
+        ) : (
+          <EmptyState
+            icon={Users}
+            title="Nenhum cliente cadastrado ainda"
+            description="Cadastre o tutor e os pets dele. Depois é só marcar na agenda ou assinar um plano."
+            action={
+              <Button onClick={() => setFormTarget("new")}>
+                <Plus size={16} /> Cadastrar o primeiro cliente
+              </Button>
+            }
+          />
+        )
       ) : (
         <div className="overflow-hidden rounded-[12px] border border-border bg-white">
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Nome</TableHead>
-                <TableHead>Telefone</TableHead>
-                <TableHead>E-mail</TableHead>
+                <TableHead>Cliente</TableHead>
                 <TableHead>Pets</TableHead>
-                <TableHead>Plano</TableHead>
+                <TableHead className="hidden md:table-cell">Plano</TableHead>
+                <TableHead className="hidden lg:table-cell">Próximo atendimento</TableHead>
                 <TableHead className="w-0" />
               </TableRow>
             </TableHeader>
@@ -134,38 +179,68 @@ export function TutoresTable({
                 const petsAtivos = tutor.pets.filter((p) => p.ativo);
                 const planosAtivos = planosAtivosDoTutor(petsAtivos);
                 return (
-                  <TableRow key={tutor.id}>
-                    <TableCell className="font-medium">{tutor.nome}</TableCell>
-                    <TableCell>{formatPhoneBR(tutor.telefone)}</TableCell>
-                    <TableCell className="text-muted-foreground">
-                      {tutor.email ?? "—"}
+                  <TableRow
+                    key={tutor.id}
+                    className="cursor-pointer"
+                    onClick={() => setPetsTutorId(tutor.id)}
+                  >
+                    <TableCell>
+                      <div className="flex flex-col">
+                        <span className="font-medium">{tutor.nome}</span>
+                        <span className="text-xs text-muted-foreground">
+                          {formatPhoneBR(tutor.telefone)}
+                        </span>
+                      </div>
                     </TableCell>
                     <TableCell>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setPetsTutorId(tutor.id)}
-                      >
-                        <PawPrint size={14} /> {petsAtivos.length}
-                      </Button>
+                      {petsAtivos.length === 0 ? (
+                        <span className="text-xs text-muted-foreground">Sem pets</span>
+                      ) : (
+                        <div className="flex flex-wrap gap-1">
+                          {petsAtivos.slice(0, 3).map((pet) => (
+                            <span
+                              key={pet.id}
+                              className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-xs"
+                            >
+                              <PawPrint size={11} className="text-muted-foreground" />
+                              {pet.nome}
+                            </span>
+                          ))}
+                          {petsAtivos.length > 3 && (
+                            <span className="text-xs text-muted-foreground">
+                              +{petsAtivos.length - 3}
+                            </span>
+                          )}
+                        </div>
+                      )}
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="hidden md:table-cell">
                       {planosAtivos.length > 0 ? (
                         <div className="flex flex-wrap gap-1">
                           {planosAtivos.map((nome) => (
-                            <Badge key={nome}>{nome}</Badge>
+                            <Badge key={nome} variant="secondary" className="text-primary">
+                              {nome}
+                            </Badge>
                           ))}
                         </div>
                       ) : (
-                        <span className="text-muted-foreground">—</span>
+                        <span className="text-xs text-muted-foreground">—</span>
                       )}
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="hidden text-sm lg:table-cell">
+                      {tutor.proximoAgendamento ? (
+                        formatProximo(tutor.proximoAgendamento)
+                      ) : (
+                        <span className="text-xs text-muted-foreground">Nada marcado</span>
+                      )}
+                    </TableCell>
+                    <TableCell onClick={(event) => event.stopPropagation()}>
                       <div className="flex justify-end gap-1">
                         <Button
                           variant="ghost"
                           size="icon"
                           aria-label={`Editar ${tutor.nome}`}
+                          title="Editar cliente"
                           onClick={() => setFormTarget(tutor.id)}
                         >
                           <Pencil size={16} />
@@ -173,7 +248,8 @@ export function TutoresTable({
                         <Button
                           variant="ghost"
                           size="icon"
-                          aria-label={`Excluir ${tutor.nome}`}
+                          aria-label={`Remover ${tutor.nome}`}
+                          title="Remover cliente"
                           onClick={() => setDeletingTutorId(tutor.id)}
                         >
                           <Trash2 size={16} />
@@ -188,7 +264,7 @@ export function TutoresTable({
         </div>
       )}
 
-      <Pagination page={page} totalPages={totalPages} />
+      {tutores.length > 0 && <Pagination page={page} totalPages={totalPages} />}
 
       <TutorSheet
         open={formTarget !== null}
@@ -208,8 +284,10 @@ export function TutoresTable({
       <ConfirmDialog
         open={!!deletingTutorId}
         onOpenChange={(open) => !open && setDeletingTutorId(null)}
-        title={`Excluir ${deletingTutor?.nome ?? "tutor"}?`}
-        description="Isso também remove todos os pets cadastrados para este tutor. Essa ação não pode ser desfeita."
+        title={`Remover ${deletingTutor?.nome ?? "cliente"}?`}
+        description="O cliente e os pets dele deixam de aparecer nas listas e no link de agendamento. O histórico de atendimentos é mantido."
+        confirmLabel="Remover"
+        pendingLabel="Removendo..."
         onConfirm={handleDelete}
         pending={isPending}
       />

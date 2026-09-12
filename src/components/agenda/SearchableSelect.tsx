@@ -66,8 +66,11 @@ export function SearchableSelect({
           <Input
             value={search}
             onChange={(event) => setSearch(event.target.value)}
-            onKeyDown={(event) => event.stopPropagation()}
-            placeholder="Pesquise/Selecione"
+            onKeyDown={(event) => {
+              // Escape precisa chegar no Select pra fechar o popup.
+              if (event.key !== "Escape") event.stopPropagation();
+            }}
+            placeholder="Buscar..."
             className="h-7 pl-7 text-xs"
           />
         </div>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, useTransition } from "react";
+import { useState, useTransition } from "react";
 import { toast } from "sonner";
 import {
   Sheet,
@@ -27,7 +27,6 @@ export function TutorSheet({
   onOpenChange: (open: boolean) => void;
   tutor?: Tutor | null;
 }) {
-  const formRef = useRef<HTMLFormElement>(null);
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const isEdit = !!tutor;
@@ -48,7 +47,7 @@ export function TutorSheet({
       if ("error" in result) {
         setError(result.error);
       } else {
-        toast.success(isEdit ? "Tutor atualizado." : "Tutor cadastrado.");
+        toast.success(isEdit ? "Cliente atualizado." : "Cliente cadastrado.");
         onOpenChange(false);
       }
     });
@@ -58,46 +57,48 @@ export function TutorSheet({
     <Sheet open={open} onOpenChange={handleOpenChange}>
       <SheetContent>
         <SheetHeader>
-          <SheetTitle>{isEdit ? "Editar tutor" : "Novo tutor"}</SheetTitle>
+          <SheetTitle>{isEdit ? "Editar cliente" : "Novo cliente"}</SheetTitle>
           <SheetDescription>
             {isEdit
-              ? "Atualize os dados do tutor."
-              : "Cadastre um novo tutor do petshop."}
+              ? "Atualize os dados de contato."
+              : "O telefone é o WhatsApp do tutor — é por ele que chegam lembretes e o extrato."}
           </SheetDescription>
         </SheetHeader>
 
         <form
-          ref={formRef}
           key={tutor?.id ?? "new"}
           onSubmit={handleSubmit}
           className="flex flex-1 flex-col gap-4 overflow-y-auto px-4"
         >
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="nome">Nome</Label>
-            <Input id="nome" name="nome" defaultValue={tutor?.nome} required />
+            <Input id="nome" name="nome" defaultValue={tutor?.nome} required autoFocus />
           </div>
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor="telefone">Telefone</Label>
+            <Label htmlFor="telefone">WhatsApp</Label>
             <Input
               id="telefone"
               name="telefone"
+              inputMode="tel"
+              autoComplete="tel"
               placeholder="(47) 99999-9999"
               defaultValue={tutor ? formatPhoneBR(tutor.telefone) : undefined}
               required
             />
           </div>
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor="email">E-mail</Label>
+            <Label htmlFor="email">E-mail <span className="font-normal text-muted-foreground">(opcional)</span></Label>
             <Input
               id="email"
               name="email"
               type="email"
+              autoComplete="email"
               defaultValue={tutor?.email ?? undefined}
             />
           </div>
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor="cpf">CPF</Label>
-            <Input id="cpf" name="cpf" defaultValue={tutor?.cpf ?? undefined} />
+            <Label htmlFor="cpf">CPF <span className="font-normal text-muted-foreground">(opcional, para nota fiscal)</span></Label>
+            <Input id="cpf" name="cpf" inputMode="numeric" defaultValue={tutor?.cpf ?? undefined} />
           </div>
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="observacoes">Observações</Label>
@@ -106,13 +107,21 @@ export function TutorSheet({
               name="observacoes"
               defaultValue={tutor?.observacoes ?? undefined}
               rows={3}
+              placeholder="Preferências, como chegar, quem busca o pet..."
             />
           </div>
-          {error && <p className="text-sm text-destructive">{error}</p>}
+          {error && (
+            <p role="alert" className="rounded-[12px] bg-destructive/10 px-3 py-2 text-sm text-destructive">
+              {error}
+            </p>
+          )}
 
-          <SheetFooter className="mt-auto px-0">
+          <SheetFooter className="flex-row justify-end px-0">
+            <Button type="button" variant="outline" onClick={() => handleOpenChange(false)} disabled={isPending}>
+              Cancelar
+            </Button>
             <Button type="submit" disabled={isPending}>
-              {isPending ? "Salvando..." : "Salvar"}
+              {isPending ? "Salvando..." : isEdit ? "Salvar" : "Cadastrar"}
             </Button>
           </SheetFooter>
         </form>

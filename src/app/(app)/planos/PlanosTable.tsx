@@ -1,8 +1,9 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import Link from "next/link";
 import { toast } from "sonner";
-import { Plus, Pencil, Trash2, Users } from "lucide-react";
+import { Plus, Pencil, Trash2, Users, SearchX, Wallet, RotateCcw } from "lucide-react";
 import {
   Table,
   TableHeader,
@@ -12,7 +13,8 @@ import {
   TableCell,
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
+import { PageHeader } from "@/components/shared/PageHeader";
+import { EmptyState } from "@/components/shared/EmptyState";
 import { SearchInput } from "@/components/shared/SearchInput";
 import { Pagination } from "@/components/shared/Pagination";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
@@ -35,16 +37,22 @@ export type ServicoOption = { id: string; nome: string; duracao_min: number };
 
 export function PlanosTable({
   planos,
+  busca,
   page,
   totalPages,
   servicos,
   assinantesPorPlano,
+  receitaRecorrenteCentavos,
+  totalPlanos,
 }: {
   planos: Plano[];
+  busca: string;
   page: number;
   totalPages: number;
   servicos: ServicoOption[];
   assinantesPorPlano: Record<string, number>;
+  receitaRecorrenteCentavos: number;
+  totalPlanos: number;
 }) {
   const [formTarget, setFormTarget] = useState<"new" | string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -66,95 +74,133 @@ export function PlanosTable({
       if ("error" in result) {
         toast.error(result.error);
       } else {
-        toast.success(`${nome} removido.`);
+        toast.success(`${nome} desativado.`);
         setDeletingId(null);
       }
     });
   }
 
+  const subtitulo =
+    totalPlanos === 0
+      ? "Crie planos de banho com créditos mensais"
+      : `${totalPlanos} plano${totalPlanos === 1 ? "" : "s"} · receita recorrente de ${formatCentavos(receitaRecorrenteCentavos)}/mês`;
+
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <h1 className="text-2xl font-semibold">Planos</h1>
-        <Button onClick={() => setFormTarget("new")}>
-          <Plus size={16} /> Novo plano
-        </Button>
-      </div>
+      <PageHeader
+        title="Planos"
+        description={subtitulo}
+        action={
+          <Button onClick={() => setFormTarget("new")}>
+            <Plus size={16} /> Novo plano
+          </Button>
+        }
+      />
 
-      <SearchInput placeholder="Buscar por nome..." />
+      <SearchInput placeholder="Buscar plano..." />
 
       {planos.length === 0 ? (
-        <div className="flex flex-col items-center gap-3 rounded-[12px] border border-dashed border-border py-16 text-center">
-          <p className="text-muted-foreground">Nenhum plano cadastrado ainda.</p>
-          <Button onClick={() => setFormTarget("new")}>
-            <Plus size={16} /> Cadastrar o primeiro plano
-          </Button>
-        </div>
+        busca ? (
+          <EmptyState
+            icon={SearchX}
+            title={`Nenhum plano encontrado para “${busca}”`}
+            action={
+              <Button variant="outline" nativeButton={false} render={<Link href="/planos" />}>
+                Limpar busca
+              </Button>
+            }
+          />
+        ) : (
+          <EmptyState
+            icon={Wallet}
+            title="Nenhum plano cadastrado ainda"
+            description="Um plano dá ao pet um número de banhos por mês por uma mensalidade fixa. Ex.: Plano Básico — 4 banhos por R$ 180,00."
+            action={
+              <Button onClick={() => setFormTarget("new")}>
+                <Plus size={16} /> Criar o primeiro plano
+              </Button>
+            }
+          />
+        )
       ) : (
         <div className="overflow-hidden rounded-[12px] border border-border bg-white">
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Nome</TableHead>
-                <TableHead>Serviço</TableHead>
-                <TableHead>Créditos/mês</TableHead>
+                <TableHead>Plano</TableHead>
+                <TableHead>Banhos por mês</TableHead>
                 <TableHead>Mensalidade</TableHead>
-                <TableHead>Acumula</TableHead>
-                <TableHead>Assinantes</TableHead>
+                <TableHead className="hidden md:table-cell">Pets no plano</TableHead>
+                <TableHead className="hidden lg:table-cell">Receita/mês</TableHead>
                 <TableHead className="w-0" />
               </TableRow>
             </TableHeader>
             <TableBody>
-              {planos.map((plano) => (
-                <TableRow key={plano.id}>
-                  <TableCell className="font-medium">{plano.nome}</TableCell>
-                  <TableCell>{plano.servicoNome}</TableCell>
-                  <TableCell>{plano.creditos_mes}</TableCell>
-                  <TableCell>{formatCentavos(plano.preco_centavos)}</TableCell>
-                  <TableCell>
-                    {plano.permite_acumular ? (
-                      <Badge>Sim</Badge>
-                    ) : (
-                      <span className="text-muted-foreground">Não</span>
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setAssinantesPlanoId(plano.id)}
-                    >
-                      <Users size={14} /> {assinantesPorPlano[plano.id] ?? 0}
-                    </Button>
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex justify-end gap-1">
+              {planos.map((plano) => {
+                const assinantes = assinantesPorPlano[plano.id] ?? 0;
+                return (
+                  <TableRow key={plano.id}>
+                    <TableCell>
+                      <div className="flex flex-col">
+                        <span className="font-medium">{plano.nome}</span>
+                        <span className="text-xs text-muted-foreground">
+                          {plano.servicoNome || (
+                            <span className="text-destructive">serviço desativado</span>
+                          )}
+                          {plano.permite_acumular && (
+                            <span className="ml-1.5 inline-flex items-center gap-0.5">
+                              <RotateCcw size={10} /> acumula sobra
+                            </span>
+                          )}
+                        </span>
+                      </div>
+                    </TableCell>
+                    <TableCell>{plano.creditos_mes}</TableCell>
+                    <TableCell>{formatCentavos(plano.preco_centavos)}</TableCell>
+                    <TableCell className="hidden md:table-cell">
                       <Button
                         variant="ghost"
-                        size="icon"
-                        aria-label={`Editar ${plano.nome}`}
-                        onClick={() => setFormTarget(plano.id)}
+                        size="sm"
+                        className="-ml-2.5"
+                        onClick={() => setAssinantesPlanoId(plano.id)}
                       >
-                        <Pencil size={16} />
+                        <Users size={14} /> {assinantes} pet{assinantes === 1 ? "" : "s"}
                       </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        aria-label={`Excluir ${plano.nome}`}
-                        onClick={() => setDeletingId(plano.id)}
-                      >
-                        <Trash2 size={16} />
-                      </Button>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))}
+                    </TableCell>
+                    <TableCell className="hidden lg:table-cell">
+                      {formatCentavos(assinantes * plano.preco_centavos)}
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex justify-end gap-1">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          aria-label={`Editar ${plano.nome}`}
+                          title="Editar plano"
+                          onClick={() => setFormTarget(plano.id)}
+                        >
+                          <Pencil size={16} />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          aria-label={`Desativar ${plano.nome}`}
+                          title="Desativar plano"
+                          onClick={() => setDeletingId(plano.id)}
+                        >
+                          <Trash2 size={16} />
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
             </TableBody>
           </Table>
         </div>
       )}
 
-      <Pagination page={page} totalPages={totalPages} />
+      {planos.length > 0 && <Pagination page={page} totalPages={totalPages} />}
 
       <PlanoSheet
         open={formTarget !== null}
@@ -169,14 +215,17 @@ export function PlanosTable({
           onOpenChange={(open) => !open && setAssinantesPlanoId(null)}
           planoId={assinantesPlano.id}
           planoNome={assinantesPlano.nome}
+          creditosMes={assinantesPlano.creditos_mes}
         />
       )}
 
       <ConfirmDialog
         open={!!deletingId}
         onOpenChange={(open) => !open && setDeletingId(null)}
-        title={`Excluir ${deletingPlano?.nome ?? "plano"}?`}
-        description="O plano deixa de aparecer nas listagens e não pode mais ser assinado. Assinaturas existentes não são afetadas. Essa ação não pode ser desfeita pela tela."
+        title={`Desativar ${deletingPlano?.nome ?? "plano"}?`}
+        description="O plano some das listas e não pode mais ser ativado para novos pets. Quem já tem o plano continua com ele normalmente."
+        confirmLabel="Desativar"
+        pendingLabel="Desativando..."
         onConfirm={handleDelete}
         pending={isPending}
       />

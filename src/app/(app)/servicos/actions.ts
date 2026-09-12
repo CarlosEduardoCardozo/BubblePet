@@ -4,6 +4,7 @@ import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentPetshopId } from "@/lib/supabase/petshop";
+import { mensagemErroBanco } from "@/lib/db-errors";
 import { parseCentavos } from "@/lib/currency";
 
 type ActionResult = { error: string } | { success: true };
@@ -65,7 +66,7 @@ export async function createServico(formData: FormData): Promise<ActionResult> {
   const { error } = await supabase
     .from("servicos")
     .insert({ ...parsed.data, petshop_id: petshopId });
-  if (error) return { error: error.message };
+  if (error) return { error: mensagemErroBanco(error) };
 
   revalidatePath("/servicos");
   return { success: true };
@@ -80,7 +81,7 @@ export async function updateServico(
 
   const supabase = await createClient();
   const { error } = await supabase.from("servicos").update(parsed.data).eq("id", id);
-  if (error) return { error: error.message };
+  if (error) return { error: mensagemErroBanco(error) };
 
   revalidatePath("/servicos");
   return { success: true };
@@ -92,7 +93,7 @@ export async function deleteServico(id: string): Promise<ActionResult> {
     .from("servicos")
     .update({ ativo: false })
     .eq("id", id);
-  if (error) return { error: error.message };
+  if (error) return { error: mensagemErroBanco(error) };
 
   revalidatePath("/servicos");
   return { success: true };

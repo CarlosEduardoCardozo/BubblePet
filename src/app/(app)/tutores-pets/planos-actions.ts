@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { DateTime } from "luxon";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentPetshopId } from "@/lib/supabase/petshop";
+import { mensagemErroBanco } from "@/lib/db-errors";
 
 type ActionResult = { error: string } | { success: true };
 
@@ -29,7 +30,7 @@ export async function assinarPlano(
     .select("id")
     .single();
   if (assinaturaError || !assinatura) {
-    return { error: assinaturaError?.message ?? "Erro ao assinar o plano." };
+    return { error: mensagemErroBanco(assinaturaError, { fallback: "Erro ao ativar o plano." }) };
   }
 
   const competencia = DateTime.now()
@@ -46,7 +47,7 @@ export async function assinarPlano(
       quantidade: plano.creditos_mes,
       competencia,
     });
-  if (movimentoError) return { error: movimentoError.message };
+  if (movimentoError) return { error: mensagemErroBanco(movimentoError) };
 
   revalidatePath("/tutores-pets");
   revalidatePath("/planos");
@@ -61,7 +62,7 @@ export async function cancelarAssinatura(
     .from("assinaturas")
     .update({ status: "cancelada" })
     .eq("id", assinaturaId);
-  if (error) return { error: error.message };
+  if (error) return { error: mensagemErroBanco(error) };
 
   revalidatePath("/tutores-pets");
   revalidatePath("/planos");

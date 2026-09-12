@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import Link from "next/link";
 import { toast } from "sonner";
 import {
   Sheet,
@@ -13,6 +14,9 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
+import { FormSelect } from "@/components/shared/FormSelect";
+import { CurrencyInput } from "@/components/shared/CurrencyInput";
 import { formatCentavos } from "@/lib/currency";
 import { createPlano, updatePlano } from "./actions";
 import type { Plano, ServicoOption } from "./PlanosTable";
@@ -48,7 +52,7 @@ export function PlanoSheet({
       if ("error" in result) {
         setError(result.error);
       } else {
-        toast.success(isEdit ? "Plano atualizado." : "Plano cadastrado.");
+        toast.success(isEdit ? "Plano atualizado." : "Plano criado.");
         onOpenChange(false);
       }
     });
@@ -61,93 +65,116 @@ export function PlanoSheet({
           <SheetTitle>{isEdit ? "Editar plano" : "Novo plano"}</SheetTitle>
           <SheetDescription>
             {isEdit
-              ? "Atualize os dados do plano."
-              : "Cadastre um novo plano de créditos mensais."}
+              ? "Mudanças valem para todos os pets com esse plano."
+              : "Um número de banhos por mês por uma mensalidade fixa."}
           </SheetDescription>
         </SheetHeader>
 
-        <form
-          key={plano?.id ?? "new"}
-          onSubmit={handleSubmit}
-          className="flex flex-1 flex-col gap-4 overflow-y-auto px-4"
-        >
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="nome">Nome</Label>
-            <Input
-              id="nome"
-              name="nome"
-              placeholder="Plano Cheiroso"
-              defaultValue={plano?.nome}
-              required
-            />
-          </div>
-
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="servico_id">Serviço coberto</Label>
-            <select
-              id="servico_id"
-              name="servico_id"
-              required
-              defaultValue={plano?.servico_id ?? ""}
-              className="h-8 rounded-[12px] border border-input bg-transparent px-2.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
-            >
-              <option value="" disabled>
-                Selecione um serviço
-              </option>
-              {servicos.map((servico) => (
-                <option key={servico.id} value={servico.id}>
-                  {servico.nome} ({servico.duracao_min} min)
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="creditos_mes">Créditos por mês</Label>
-            <Input
-              id="creditos_mes"
-              name="creditos_mes"
-              type="number"
-              min={1}
-              step={1}
-              defaultValue={plano?.creditos_mes ?? 3}
-              required
-            />
-          </div>
-
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="preco">Mensalidade</Label>
-            <Input
-              id="preco"
-              name="preco"
-              placeholder="149,90"
-              defaultValue={
-                plano
-                  ? formatCentavos(plano.preco_centavos).replace("R$", "").trim()
-                  : undefined
-              }
-              required
-            />
-          </div>
-
-          <label className="flex items-center gap-2 text-sm">
-            <input
-              type="checkbox"
-              name="permite_acumular"
-              defaultChecked={plano?.permite_acumular ?? false}
-              className="size-4 rounded border-input"
-            />
-            Crédito não usado acumula pro mês seguinte
-          </label>
-
-          {error && <p className="text-sm text-destructive">{error}</p>}
-
-          <SheetFooter className="mt-auto px-0">
-            <Button type="submit" disabled={isPending}>
-              {isPending ? "Salvando..." : "Salvar"}
+        {servicos.length === 0 ? (
+          <div className="flex flex-col gap-3 px-4 text-sm">
+            <p className="rounded-[12px] bg-warning/10 px-3 py-2 text-warning-foreground">
+              Cadastre um serviço antes de criar um plano — o plano cobre um serviço
+              específico (ex.: Banho).
+            </p>
+            <Button variant="outline" nativeButton={false} render={<Link href="/servicos" />}>
+              Ir para Serviços
             </Button>
-          </SheetFooter>
-        </form>
+          </div>
+        ) : (
+          <form
+            key={plano?.id ?? "new"}
+            onSubmit={handleSubmit}
+            className="flex flex-1 flex-col gap-4 overflow-y-auto px-4"
+          >
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="nome">Nome do plano</Label>
+              <Input
+                id="nome"
+                name="nome"
+                placeholder="Plano Básico"
+                defaultValue={plano?.nome}
+                required
+                autoFocus
+              />
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="servico_id">Serviço coberto</Label>
+              <FormSelect
+                id="servico_id"
+                name="servico_id"
+                defaultValue={plano?.servico_id}
+                placeholder="Selecione um serviço"
+                options={servicos.map((servico) => ({
+                  value: servico.id,
+                  label: servico.nome,
+                  hint: `${servico.duracao_min} min`,
+                }))}
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="creditos_mes">Banhos por mês</Label>
+                <Input
+                  id="creditos_mes"
+                  name="creditos_mes"
+                  type="number"
+                  min={1}
+                  step={1}
+                  defaultValue={plano?.creditos_mes ?? 4}
+                  required
+                />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="preco">Mensalidade</Label>
+                <CurrencyInput
+                  id="preco"
+                  name="preco"
+                  defaultValue={
+                    plano
+                      ? formatCentavos(plano.preco_centavos).replace("R$", "").trim()
+                      : undefined
+                  }
+                  required
+                />
+              </div>
+            </div>
+            <p className="-mt-2 text-xs text-muted-foreground">
+              Ao ativar o plano num pet, os créditos do mês atual já ficam disponíveis.
+              Todo dia 1 eles renovam sozinhos.
+            </p>
+
+            <Label className="flex items-start gap-2.5 rounded-[12px] border border-border p-3 font-normal">
+              <Checkbox
+                name="permite_acumular"
+                defaultChecked={plano?.permite_acumular ?? false}
+                className="mt-0.5"
+              />
+              <span className="flex flex-col gap-0.5">
+                <span className="font-medium">Acumular sobra</span>
+                <span className="text-xs text-muted-foreground">
+                  Créditos não usados passam para o mês seguinte.
+                </span>
+              </span>
+            </Label>
+
+            {error && (
+              <p role="alert" className="rounded-[12px] bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                {error}
+              </p>
+            )}
+
+            <SheetFooter className="flex-row justify-end px-0">
+              <Button type="button" variant="outline" onClick={() => handleOpenChange(false)} disabled={isPending}>
+                Cancelar
+              </Button>
+              <Button type="submit" disabled={isPending}>
+                {isPending ? "Salvando..." : isEdit ? "Salvar" : "Criar plano"}
+              </Button>
+            </SheetFooter>
+          </form>
+        )}
       </SheetContent>
     </Sheet>
   );
