@@ -144,6 +144,45 @@ export async function enviarTexto(
   });
 }
 
+/**
+ * Mensagem com botões de resposta (POST /send/menu, type "button"). Cada
+ * botão vai como "Texto|id"; quando o cliente toca, o webhook recebe o id em
+ * `message.buttonOrListid`.
+ */
+export async function enviarBotoes(
+  token: string,
+  numeroE164: string,
+  mensagem: { texto: string; botoes: { label: string; id: string }[]; rodape?: string }
+): Promise<void> {
+  await request("/send/menu", {
+    token,
+    body: {
+      number: paraNumeroUazapi(numeroE164),
+      type: "button",
+      text: mensagem.texto,
+      choices: mensagem.botoes.map((b) => `${b.label}|${b.id}`),
+      footerText: mensagem.rodape,
+    },
+  });
+}
+
+/**
+ * Registra (ou atualiza) o webhook único da instância pra receber as
+ * mensagens que chegam. `wasSentByApi` fica de fora pra não receber de volta
+ * o que o próprio sistema mandou.
+ */
+export async function configurarWebhook(token: string, url: string): Promise<void> {
+  await request("/webhook", {
+    token,
+    body: {
+      enabled: true,
+      url,
+      events: ["messages"],
+      excludeMessages: ["wasSentByApi"],
+    },
+  });
+}
+
 export async function enviarDocumento(
   token: string,
   numeroE164: string,

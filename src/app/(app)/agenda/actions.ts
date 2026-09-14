@@ -2,14 +2,25 @@
 
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
+import { after } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentPetshopId } from "@/lib/supabase/petshop";
 import { AGENDAMENTO_STATUSES, type AgendamentoStatus } from "@/lib/agendamento";
 import { mensagemErroBanco } from "@/lib/db-errors";
-import { enviarMensagemWhatsapp } from "@/lib/whatsapp";
-import { templateLembrete } from "@/lib/whatsapp-templates";
+import { notificarAgendamento } from "@/lib/agenda/notificar";
 
 type ActionResult = { error: string } | { success: true };
+
+/**
+ * "Avisar o tutor pelo WhatsApp" marcado no formulário: a confirmação com os
+ * botões Confirmar/Cancelar sai depois da resposta, sem segurar a tela.
+ */
+function avisarDepois(formData: FormData, petshopId: string, agendamentoId: string) {
+  if (formData.get("avisar") !== "on") return;
+  after(async () => {
+    await notificarAgendamento(petshopId, agendamentoId, "confirmacao");
+  });
+}
 
 const agendamentoFields = z.object({
   pet_id: z.string().trim().min(1, "Selecione o pet"),
@@ -66,17 +77,22 @@ export async function createAgendamento(formData: FormData): Promise<ActionResul
     return { error: "Já existe um agendamento nesse horário." };
   }
 
-  const { error } = await supabase.from("agendamentos").insert({
-    petshop_id: petshopId,
-    pet_id: parsed.data.pet_id,
-    servico_id: parsed.data.servico_id,
-    inicio: inicio.toISOString(),
-    fim: fim.toISOString(),
-    observacoes: parsed.data.observacoes || null,
-    valor_centavos: servico.preco_centavos,
-  });
-  if (error) return { error: mensagemErroBanco(error) };
+  const { data: criado, error } = await supabase
+    .from("agendamentos")
+    .insert({
+      petshop_id: petshopId,
+      pet_id: parsed.data.pet_id,
+      servico_id: parsed.data.servico_id,
+      inicio: inicio.toISOString(),
+      fim: fim.toISOString(),
+      observacoes: parsed.data.observacoes || null,
+      valor_centavos: servico.preco_centavos,
+    })
+    .select("id")
+    .single();
+  if (error || !criado) return { error: mensagemErroBanco(error) };
 
+  avisarDepois(formData, petshopId, criado.id);
   revalidatePath("/agenda");
   revalidatePath("/dashboard");
   return { success: true };
@@ -101,10 +117,11 @@ export async function createAgendamentoComPlano(
   }
 
   const supabase = await createClient();
+  const petshopId = await getCurrentPetshopId(supabase);
   // Toda a validação (plano ativo, saldo, conflito) e a escrita do consumo
   // acontecem dentro da function — mesma regra pra qualquer chamador, não só
   // o app.
-  const { error } = await supabase.rpc("agendar_com_plano", {
+  const { data: agendamentoId, error } = await supabase.rpc("agendar_com_plano", {
     p_pet_id: parsed.data.pet_id,
     p_servico_id: parsed.data.servico_id,
     p_inicio: inicio.toISOString(),
@@ -112,6 +129,7 @@ export async function createAgendamentoComPlano(
   });
   if (error) return { error: mensagemErroBanco(error) };
 
+  if (agendamentoId) avisarDepois(formData, petshopId, agendamentoId as string);
   revalidatePath("/agenda");
   revalidatePath("/dashboard");
   return { success: true };
@@ -136,11 +154,6 @@ export async function updateAgendamentoStatus(
   revalidatePath("/dashboard");
   revalidatePath("/financeiro");
   return { success: true };
-}
-
-type Um<T> = T | T[] | null | undefined;
-function um<T>(v: Um<T>): T | undefined {
-  return Array.isArray(v) ? v[0] : (v ?? undefined);
 }
 
 /**
@@ -230,35 +243,6 @@ export async function moverAgendamento(id: string, inicioISO: string): Promise<A
 export async function enviarLembrete(agendamentoId: string): Promise<ActionResult> {
   const supabase = await createClient();
   const petshopId = await getCurrentPetshopId(supabase);
-
-  const [{ data: ag }, { data: petshop }] = await Promise.all([
-    supabase
-      .from("agendamentos")
-      .select("id, inicio, pets(nome, tutores(id, nome, telefone)), servicos(nome)")
-      .eq("id", agendamentoId)
-      .single(),
-    supabase.from("petshops").select("nome").eq("id", petshopId).single(),
-  ]);
-
-  const pet = um(ag?.pets as Um<{ nome: string; tutores: Um<{ id: string; nome: string; telefone: string }> }>);
-  const tutor = um(pet?.tutores);
-  const servico = um(ag?.servicos as Um<{ nome: string }>);
-  if (!ag || !pet || !tutor || !servico || !petshop) {
-    return { error: "Agendamento não encontrado." };
-  }
-
-  const resultado = await enviarMensagemWhatsapp({
-    petshopId,
-    tutorId: tutor.id,
-    numeroE164: tutor.telefone,
-    tipo: "lembrete",
-    texto: templateLembrete({
-      petshopNome: petshop.nome,
-      tutorNome: tutor.nome,
-      petNome: pet.nome,
-      servicoNome: servico.nome,
-      inicioISO: ag.inicio,
-    }),
-  });
+  const resultado = await notificarAgendamento(petshopId, agendamentoId, "lembrete");
   return resultado.ok ? { success: true } : { error: resultado.erro };
 }

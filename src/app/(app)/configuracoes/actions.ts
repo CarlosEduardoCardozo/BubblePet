@@ -15,7 +15,7 @@ import {
   statusInstancia,
   UazapiError,
 } from "@/lib/uazapi";
-import { enviarMensagemWhatsapp, obterTokenWhatsapp } from "@/lib/whatsapp";
+import { enviarMensagemWhatsapp, garantirWebhook, obterTokenWhatsapp } from "@/lib/whatsapp";
 import { templateTeste } from "@/lib/whatsapp-templates";
 
 type ActionResult = { error: string } | { success: true };
@@ -176,6 +176,9 @@ async function sincronizarStatus(petshopId: string, token: string): Promise<Esta
   const st = await statusInstancia(token);
 
   if (st.loggedIn) {
+    // Registra na UAZAPI pra onde mandar as respostas dos botões (só na
+    // versão publicada — ver garantirWebhook).
+    await garantirWebhook(petshopId);
     await supabase
       .from("petshops")
       .update({

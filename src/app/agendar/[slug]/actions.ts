@@ -4,7 +4,8 @@ import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { normalizePhoneBR } from "@/lib/phone";
 import { enviarMensagemWhatsapp } from "@/lib/whatsapp";
-import { templateConfirmacao, templateOtp } from "@/lib/whatsapp-templates";
+import { templateOtp } from "@/lib/whatsapp-templates";
+import { notificarAgendamento } from "@/lib/agenda/notificar";
 import { calcularHorariosLivres } from "@/lib/agenda/slots";
 import { emitirOtp, verificarOtp } from "@/lib/publico/otp";
 import { criarSessaoTutor, encerrarSessaoTutor, getSessaoTutor } from "@/lib/publico/session";
@@ -12,7 +13,6 @@ import {
   agendarPublico,
   ocupadosNoDia,
   petshopPorSlug,
-  tutorPorId,
   tutorPorTelefone,
   type ResultadoAgendar,
 } from "@/lib/publico/dal";
@@ -128,25 +128,9 @@ export async function confirmarAgendamento(
   });
   if (!resultado.ok) return resultado;
 
-  // Confirmação por WhatsApp: falha aqui não desfaz o agendamento.
-  const tutor = await tutorPorId(petshop.id, sessao.tutorId);
-  if (tutor) {
-    await enviarMensagemWhatsapp({
-      petshopId: petshop.id,
-      tutorId: sessao.tutorId,
-      numeroE164: tutor.telefone,
-      tipo: "confirmacao",
-      texto: templateConfirmacao({
-        petshopNome: petshop.nome,
-        tutorNome: tutor.nome,
-        petNome: resultado.petNome,
-        servicoNome: resultado.servicoNome,
-        inicioISO: resultado.inicioISO,
-        valorCentavos: resultado.valorCentavos,
-        planoNome: resultado.planoNome,
-      }),
-    });
-  }
+  // Confirmação por WhatsApp, com os botões Confirmar/Cancelar. Falha aqui
+  // não desfaz o agendamento.
+  await notificarAgendamento(petshop.id, resultado.agendamentoId, "confirmacao");
 
   revalidatePath("/agenda");
   revalidatePath("/dashboard");

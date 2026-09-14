@@ -1,4 +1,6 @@
 import QRCode from "qrcode";
+import { appUrl } from "@/lib/app-url";
+import { garantirWebhook } from "@/lib/whatsapp";
 import { createClient } from "@/lib/supabase/server";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { PetshopForm } from "./PetshopForm";
@@ -33,7 +35,13 @@ export default async function ConfiguracoesPage() {
     );
   }
 
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
+  // Instância conectada: garante que a UAZAPI manda as respostas dos botões
+  // Confirmar/Cancelar pra cá (só age na versão publicada e só se mudou).
+  if (petshop.whatsapp_status === "conectado") {
+    await garantirWebhook(petshop.id);
+  }
+
+  const baseUrl = appUrl();
   const linkPublico = `${baseUrl}/agendar/${petshop.slug}`;
   const qrDataUrl = await QRCode.toDataURL(linkPublico, {
     margin: 1,

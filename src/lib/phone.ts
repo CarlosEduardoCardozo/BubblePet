@@ -27,3 +27,16 @@ export function formatPhoneBR(e164: string): string {
   const [, ddd, prefix, suffix] = match;
   return `(${ddd}) ${prefix}-${suffix}`;
 }
+
+/**
+ * Chave de comparação de telefone BR: DDD + últimos 8 dígitos. O WhatsApp às
+ * vezes manda o número sem o 9º dígito (JID antigo: 554799217533), então
+ * "+5547999217533" e "554799217533" precisam bater.
+ */
+export function chaveTelefoneBR(raw: string | null | undefined): string | null {
+  if (!raw) return null;
+  let digitos = raw.split("@")[0].split(":")[0].replace(/\D/g, "");
+  if (digitos.startsWith("55") && digitos.length >= 12) digitos = digitos.slice(2);
+  if (digitos.length < 10) return null;
+  return `${digitos.slice(0, 2)}${digitos.slice(-8)}`;
+}

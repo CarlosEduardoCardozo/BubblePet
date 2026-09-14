@@ -91,10 +91,12 @@ export function AgendaView({
   pets,
   servicos,
   horario,
+  whatsappConectado,
 }: {
   pets: PetOption[];
   servicos: ServicoOption[];
   horario: HorarioFuncionamento;
+  whatsappConectado: boolean;
 }) {
   const calendarRef = useRef<FullCalendar>(null);
   const [events, setEvents] = useState<AgendamentoEvent[]>([]);
@@ -433,6 +435,7 @@ export function AgendaView({
         servicos={servicos}
         horario={horario}
         ocupados={ocupados}
+        whatsappConectado={whatsappConectado}
         onSaved={() => {
           setNovoSlot(null);
           reload();

@@ -19,7 +19,7 @@ export default async function AgendaPage() {
       .order("nome"),
     supabase
       .from("petshops")
-      .select("horario_abertura, horario_fechamento, dias_funcionamento")
+      .select("horario_abertura, horario_fechamento, dias_funcionamento, whatsapp_status")
       .single(),
   ]);
 
@@ -40,6 +40,7 @@ export default async function AgendaPage() {
       }))}
       servicos={servicos ?? []}
       horario={horario}
+      whatsappConectado={petshop?.whatsapp_status === "conectado"}
     />
   );
 }

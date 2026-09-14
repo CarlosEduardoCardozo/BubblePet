@@ -1,7 +1,15 @@
 import "server-only";
 
+import { randomBytes } from "node:crypto";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { enviarDocumento, enviarTexto, UazapiError } from "@/lib/uazapi";
+import { appUrlPublica } from "@/lib/app-url";
+import {
+  configurarWebhook,
+  enviarBotoes,
+  enviarDocumento,
+  enviarTexto,
+  UazapiError,
+} from "@/lib/uazapi";
 
 export type TipoMensagem =
   | "teste"
@@ -13,18 +21,56 @@ export type TipoMensagem =
 
 export type ResultadoEnvio = { ok: true } | { ok: false; erro: string };
 
+type Instancia = {
+  token: string;
+  webhookSecret: string | null;
+  webhookUrl: string | null;
+};
+
 /**
- * Token da instância do petshop. Vive em `petshop_whatsapp` (RLS sem policy),
- * então só o client admin lê — por isso essa função é server-only.
+ * Dados da instância do petshop. Vivem em `petshop_whatsapp` (RLS sem policy),
+ * então só o client admin lê — por isso este módulo é server-only.
  */
-export async function obterTokenWhatsapp(petshopId: string): Promise<string | null> {
+async function obterInstancia(petshopId: string): Promise<Instancia | null> {
   const admin = createAdminClient();
   const { data } = await admin
     .from("petshop_whatsapp")
-    .select("token")
+    .select("token, webhook_secret, webhook_url")
     .eq("petshop_id", petshopId)
     .maybeSingle();
-  return data?.token ?? null;
+  if (!data) return null;
+  return { token: data.token, webhookSecret: data.webhook_secret, webhookUrl: data.webhook_url };
+}
+
+export async function obterTokenWhatsapp(petshopId: string): Promise<string | null> {
+  return (await obterInstancia(petshopId))?.token ?? null;
+}
+
+/**
+ * Garante que a UAZAPI manda as respostas dos clientes (botões Confirmar /
+ * Cancelar) pra este app. Só roda na versão publicada: o localhost usa a
+ * mesma instância e desviaria as respostas de produção.
+ */
+export async function garantirWebhook(petshopId: string): Promise<void> {
+  const base = appUrlPublica();
+  if (!base) return;
+  const instancia = await obterInstancia(petshopId);
+  if (!instancia) return;
+
+  const segredo = instancia.webhookSecret ?? randomBytes(24).toString("base64url");
+  const url = `${base}/api/webhooks/whatsapp/${segredo}`;
+  if (instancia.webhookUrl === url) return;
+
+  try {
+    await configurarWebhook(instancia.token, url);
+    await createAdminClient()
+      .from("petshop_whatsapp")
+      .update({ webhook_secret: segredo, webhook_url: url, atualizado_em: new Date().toISOString() })
+      .eq("petshop_id", petshopId);
+  } catch (error) {
+    // Não impede o envio: a mensagem sai, só a resposta pelo botão não volta.
+    console.error("Falha ao configurar webhook da UAZAPI", error);
+  }
 }
 
 function descreverErro(error: unknown): string {
@@ -41,9 +87,10 @@ function descreverErro(error: unknown): string {
 }
 
 /**
- * Envia texto ou documento pelo WhatsApp do petshop e registra o resultado em
- * `mensagens_whatsapp`. Nunca lança: quem chama decide o que fazer com a
- * falha (um agendamento não pode ser desfeito porque a mensagem não saiu).
+ * Envia texto, texto com botões ou documento pelo WhatsApp do petshop e
+ * registra o resultado em `mensagens_whatsapp`. Nunca lança: quem chama
+ * decide o que fazer com a falha (um agendamento não pode ser desfeito
+ * porque a mensagem não saiu).
  */
 export async function enviarMensagemWhatsapp(params: {
   petshopId: string;
@@ -51,10 +98,13 @@ export async function enviarMensagemWhatsapp(params: {
   numeroE164: string;
   tipo: TipoMensagem;
   texto?: string;
+  /** Botões de resposta; o texto vai junto. Se o envio com botões falhar, cai pra texto simples. */
+  botoes?: { label: string; id: string }[];
+  rodape?: string;
   documento?: { base64: string; mimetype: string; nome: string; legenda?: string };
 }): Promise<ResultadoEnvio> {
   const admin = createAdminClient();
-  const token = await obterTokenWhatsapp(params.petshopId);
+  const instancia = await obterInstancia(params.petshopId);
 
   async function registrar(status: "enviada" | "erro", erro?: string) {
     await admin.from("mensagens_whatsapp").insert({
@@ -67,7 +117,7 @@ export async function enviarMensagemWhatsapp(params: {
     });
   }
 
-  if (!token) {
+  if (!instancia) {
     const erro = "WhatsApp não conectado. Conecte em Configurações.";
     await registrar("erro", erro);
     return { ok: false, erro };
@@ -75,9 +125,26 @@ export async function enviarMensagemWhatsapp(params: {
 
   try {
     if (params.documento) {
-      await enviarDocumento(token, params.numeroE164, params.documento);
+      await enviarDocumento(instancia.token, params.numeroE164, params.documento);
+    } else if (params.texto && params.botoes?.length) {
+      await garantirWebhook(params.petshopId);
+      try {
+        await enviarBotoes(instancia.token, params.numeroE164, {
+          texto: params.texto,
+          botoes: params.botoes,
+          rodape: params.rodape,
+        });
+      } catch (error) {
+        // Botão recusado pela API: manda o texto com a instrução de responder.
+        if (!(error instanceof UazapiError) || error.status >= 500 || error.status === 401) throw error;
+        await enviarTexto(
+          instancia.token,
+          params.numeroE164,
+          params.rodape ? `${params.texto}\n\n${params.rodape}` : params.texto
+        );
+      }
     } else if (params.texto) {
-      await enviarTexto(token, params.numeroE164, params.texto);
+      await enviarTexto(instancia.token, params.numeroE164, params.texto);
     } else {
       throw new Error("Mensagem sem texto nem documento.");
     }
@@ -88,4 +155,12 @@ export async function enviarMensagemWhatsapp(params: {
     await registrar("erro", erro);
     return { ok: false, erro };
   }
+}
+
+/** Botões padrão de confirmação de um agendamento. */
+export function botoesConfirmacao(agendamentoId: string) {
+  return [
+    { label: "✅ Confirmar", id: `confirmar:${agendamentoId}` },
+    { label: "❌ Cancelar", id: `cancelar:${agendamentoId}` },
+  ];
 }

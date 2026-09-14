@@ -41,6 +41,7 @@ export function NovoAgendamentoSheet({
   servicos,
   horario,
   ocupados,
+  whatsappConectado,
   onSaved,
 }: {
   open: boolean;
@@ -50,6 +51,7 @@ export function NovoAgendamentoSheet({
   servicos: ServicoOption[];
   horario: HorarioFuncionamento;
   ocupados: Ocupado[];
+  whatsappConectado: boolean;
   onSaved: () => void;
 }) {
   const [isPending, startTransition] = useTransition();
@@ -60,6 +62,7 @@ export function NovoAgendamentoSheet({
   const [hora, setHora] = useState("");
   const [planoInfo, setPlanoInfo] = useState<PlanoInfo | null | undefined>(undefined);
   const [usarPlano, setUsarPlano] = useState(true);
+  const [avisar, setAvisar] = useState(true);
 
   // Pré-preenche data/hora quando o slot muda (clique na grade ou no painel).
   const slotKey = slot ? slot.start.getTime() : 0;
@@ -181,6 +184,7 @@ export function NovoAgendamentoSheet({
     formData.set("pet_id", petId);
     formData.set("servico_id", servicoId);
     formData.set("inicio", inicioEscolhido.toISO()!);
+    if (whatsappConectado && avisar) formData.set("avisar", "on");
 
     const usandoCredito = usarPlano && !!planoInfo && planoInfo.saldo > 0;
 
@@ -191,10 +195,9 @@ export function NovoAgendamentoSheet({
       if ("error" in result) {
         setError(result.error);
       } else {
+        const aviso = whatsappConectado && avisar ? " O tutor vai receber a confirmação no WhatsApp." : "";
         toast.success(
-          usandoCredito
-            ? "Agendado com crédito do plano."
-            : "Agendamento criado."
+          (usandoCredito ? "Agendado com crédito do plano." : "Agendamento criado.") + aviso
         );
         onSaved();
       }
@@ -320,6 +323,24 @@ export function NovoAgendamentoSheet({
             <Label htmlFor="observacoes">Observações</Label>
             <Textarea id="observacoes" name="observacoes" rows={2} placeholder="Ex.: tosa na máquina 5, não usar perfume" />
           </div>
+
+          {whatsappConectado && (
+            <label className="flex items-start gap-2.5 rounded-[12px] border border-border px-3 py-2.5 text-sm">
+              <input
+                type="checkbox"
+                checked={avisar}
+                onChange={(event) => setAvisar(event.target.checked)}
+                className="mt-0.5 size-4 accent-primary"
+              />
+              <span className="flex flex-col gap-0.5">
+                <span className="font-medium">Avisar o tutor pelo WhatsApp</span>
+                <span className="text-xs text-muted-foreground">
+                  Ele recebe os dados do agendamento com os botões Confirmar e Cancelar — a resposta
+                  muda a agenda sozinha.
+                </span>
+              </span>
+            </label>
+          )}
 
           {error && (
             <p role="alert" className="rounded-[12px] bg-destructive/10 px-3 py-2 text-sm text-destructive">
