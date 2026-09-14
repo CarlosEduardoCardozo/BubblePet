@@ -18,7 +18,7 @@ export default async function ServicosPage({
 
   let query = supabase
     .from("servicos")
-    .select("id, nome, duracao_min, preco_centavos", { count: "exact" })
+    .select("id, nome, duracao_min, preco_centavos, preco_pequeno_centavos, preco_medio_centavos, preco_grande_centavos", { count: "exact" })
     .eq("ativo", true)
     .order("nome")
     .range((page - 1) * PAGE_SIZE, page * PAGE_SIZE - 1);

@@ -16,8 +16,19 @@ type ServicoFormResult =
         nome: string;
         duracao_min: number;
         preco_centavos: number;
+        preco_pequeno_centavos: number | null;
+        preco_medio_centavos: number | null;
+        preco_grande_centavos: number | null;
       };
     };
+
+/** Campo de preço por porte: vazio = usa o preço padrão. */
+function lerPrecoOpcional(raw: FormDataEntryValue | null): number | null | "invalido" {
+  const texto = typeof raw === "string" ? raw.trim() : "";
+  if (!texto) return null;
+  const centavos = parseCentavos(texto);
+  return centavos === null || centavos < 0 ? "invalido" : centavos;
+}
 
 const servicoFields = z.object({
   nome: z.string().trim().min(2, "Nome muito curto"),
@@ -47,11 +58,21 @@ function readServicoForm(formData: FormData): ServicoFormResult {
     return { error: "Preço inválido" };
   }
 
+  const pequeno = lerPrecoOpcional(formData.get("preco_pequeno"));
+  const medio = lerPrecoOpcional(formData.get("preco_medio"));
+  const grande = lerPrecoOpcional(formData.get("preco_grande"));
+  if (pequeno === "invalido" || medio === "invalido" || grande === "invalido") {
+    return { error: "Preço por porte inválido" };
+  }
+
   return {
     data: {
       nome: parsed.data.nome,
       duracao_min: Math.round(duracao),
       preco_centavos: centavos,
+      preco_pequeno_centavos: pequeno,
+      preco_medio_centavos: medio,
+      preco_grande_centavos: grande,
     },
   };
 }

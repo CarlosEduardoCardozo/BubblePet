@@ -1,4 +1,5 @@
 import { DateTime } from "luxon";
+import type { Adicional } from "@/lib/adicionais";
 
 export const ZONE = "America/Sao_Paulo";
 
@@ -24,6 +25,7 @@ export type AgendamentoConcluido = {
   inicio: string;
   valor_centavos: number | null;
   origem_plano: boolean;
+  adicionais?: Adicional[] | null;
   pet: { id: string; nome: string; tutor_id: string };
   servico: { nome: string; preco_centavos: number };
 };
@@ -35,7 +37,8 @@ export type AssinaturaAtiva = {
 };
 
 export type ItemFechamento = {
-  tipo: "servico" | "mensalidade";
+  /** "adicional" = extra de um atendimento (mesma data e agendamentoId). */
+  tipo: "servico" | "mensalidade" | "adicional";
   descricao: string;
   petNome: string;
   /** ISO do atendimento (só serviços). */
@@ -100,6 +103,17 @@ export function calcularFechamentos(input: {
       cobertoPlano: ag.origem_plano,
       agendamentoId: ag.id,
     });
+    // Extras são cobrados mesmo quando o banho é coberto pelo plano.
+    for (const extra of ag.adicionais ?? []) {
+      push(ag.pet.tutor_id, {
+        tipo: "adicional",
+        descricao: extra.descricao,
+        petNome: ag.pet.nome,
+        data: ag.inicio,
+        valorCentavos: extra.valorCentavos,
+        agendamentoId: ag.id,
+      });
+    }
   }
 
   return Array.from(porTutor.entries()).map(([tutorId, itens]) => ({
@@ -125,7 +139,7 @@ export function totalizar(fechamentos: FechamentoTutor[]): {
       if (i.tipo === "servico") {
         atendimentos += 1;
         if (i.cobertoPlano) cobertos += 1;
-      } else {
+      } else if (i.tipo === "mensalidade") {
         mensalidades += i.valorCentavos;
       }
     }

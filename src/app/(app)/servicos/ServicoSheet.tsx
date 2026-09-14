@@ -15,6 +15,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { CurrencyInput } from "@/components/shared/CurrencyInput";
 import { formatCentavos } from "@/lib/currency";
+import { PORTES } from "@/lib/servico-preco";
 import { createServico, updateServico } from "./actions";
 import type { Servico } from "./ServicosTable";
 
@@ -95,7 +96,7 @@ export function ServicoSheet({
               />
             </div>
             <div className="flex flex-col gap-1.5">
-              <Label htmlFor="preco">Preço</Label>
+              <Label htmlFor="preco">Preço padrão</Label>
               <CurrencyInput
                 id="preco"
                 name="preco"
@@ -106,6 +107,41 @@ export function ServicoSheet({
               />
             </div>
           </div>
+          <div className="flex flex-col gap-2 rounded-[12px] border border-border p-3">
+            <div className="flex flex-col gap-0.5">
+              <span className="text-sm font-medium">Preço por porte</span>
+              <span className="text-xs text-muted-foreground">
+                Opcional. Deixe em branco pra usar o preço acima. Na agenda, o valor é escolhido
+                pelo porte do pet.
+              </span>
+            </div>
+            <div className="grid grid-cols-3 gap-2">
+              {PORTES.map((p) => {
+                const atual =
+                  p.valor === "pequeno"
+                    ? servico?.preco_pequeno_centavos
+                    : p.valor === "medio"
+                      ? servico?.preco_medio_centavos
+                      : servico?.preco_grande_centavos;
+                return (
+                  <div key={p.valor} className="flex flex-col gap-1">
+                    <Label htmlFor={`preco_${p.valor}`} className="text-xs text-muted-foreground">
+                      {p.label}
+                    </Label>
+                    <CurrencyInput
+                      id={`preco_${p.valor}`}
+                      name={`preco_${p.valor}`}
+                      placeholder="—"
+                      defaultValue={
+                        atual != null ? formatCentavos(atual).replace("R$", "").trim() : undefined
+                      }
+                    />
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
           {error && (
             <p role="alert" className="rounded-[12px] bg-destructive/10 px-3 py-2 text-sm text-destructive">
               {error}

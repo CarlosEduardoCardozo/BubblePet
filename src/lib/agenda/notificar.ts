@@ -3,6 +3,7 @@ import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { botoesConfirmacao, enviarMensagemWhatsapp, type ResultadoEnvio } from "@/lib/whatsapp";
 import { RODAPE_BOTOES, templateConfirmacao, templateLembrete } from "@/lib/whatsapp-templates";
+import { lerAdicionais } from "@/lib/adicionais";
 
 type Um<T> = T | T[] | null | undefined;
 function um<T>(v: Um<T>): T | undefined {
@@ -25,7 +26,7 @@ export async function notificarAgendamento(
     admin
       .from("agendamentos")
       .select(
-        "id, inicio, status, origem_plano, valor_centavos, assinatura_id, pets(nome, tutores(id, nome, telefone)), servicos(nome)"
+        "id, inicio, status, origem_plano, valor_centavos, adicionais, assinatura_id, pets(nome, tutores(id, nome, telefone)), servicos(nome)"
       )
       .eq("id", agendamentoId)
       .eq("petshop_id", petshopId)
@@ -74,6 +75,10 @@ export async function notificarAgendamento(
           inicioISO: ag.inicio,
           valorCentavos: ag.valor_centavos ?? 0,
           planoNome: ag.origem_plano ? (planoNome ?? "plano") : null,
+          adicionais: (() => {
+            const extras = lerAdicionais(ag.adicionais);
+            return extras.ok ? extras.adicionais : [];
+          })(),
         });
 
   const resultado = await enviarMensagemWhatsapp({

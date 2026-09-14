@@ -4,8 +4,15 @@ import { cache } from "react";
 import { cookies } from "next/headers";
 import { SignJWT, jwtVerify } from "jose";
 
-const COOKIE = "bp_agendar";
-const DURACAO_SEG = 30 * 60;
+// Um cookie por petshop. Depois do primeiro código, o celular fica lembrado
+// por 180 dias: o tutor volta pelo link e já cai na tela de agendar. "Sair"
+// apaga o cookie.
+const PREFIXO = "bp_agendar_";
+const DURACAO_SEG = 180 * 24 * 60 * 60;
+
+function nomeCookie(slug: string): string {
+  return PREFIXO + slug.replace(/[^a-z0-9-]/g, "");
+}
 
 export type SessaoTutor = { tutorId: string; petshopId: string; slug: string };
 
@@ -25,7 +32,7 @@ export async function criarSessaoTutor(sessao: SessaoTutor): Promise<void> {
 
   const store = await cookies();
   store.set({
-    name: COOKIE,
+    name: nomeCookie(sessao.slug),
     value: token,
     httpOnly: true,
     sameSite: "lax",
@@ -35,9 +42,9 @@ export async function criarSessaoTutor(sessao: SessaoTutor): Promise<void> {
   });
 }
 
-export async function encerrarSessaoTutor(): Promise<void> {
+export async function encerrarSessaoTutor(slug: string): Promise<void> {
   const store = await cookies();
-  store.set({ name: COOKIE, value: "", path: "/agendar", maxAge: 0 });
+  store.set({ name: nomeCookie(slug), value: "", path: "/agendar", maxAge: 0 });
 }
 
 /**
@@ -46,7 +53,7 @@ export async function encerrarSessaoTutor(): Promise<void> {
  */
 export const getSessaoTutor = cache(async (slug: string): Promise<SessaoTutor | null> => {
   const store = await cookies();
-  const token = store.get(COOKIE)?.value;
+  const token = store.get(nomeCookie(slug))?.value;
   if (!token) return null;
   try {
     const { payload } = await jwtVerify(token, segredo(), { algorithms: ["HS256"] });

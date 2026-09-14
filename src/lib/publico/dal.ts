@@ -2,6 +2,7 @@ import "server-only";
 
 import { DateTime } from "luxon";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { precoParaPorte, type PrecosServico } from "@/lib/servico-preco";
 import {
   calcularHorariosLivres,
   HORARIO_PADRAO,
@@ -37,9 +38,11 @@ export async function petshopPorSlug(slug: string): Promise<PetshopPublico | nul
   const { data } = await admin
     .from("petshops")
     .select(
-      "id, nome, slug, telefone, whatsapp_numero, endereco, whatsapp_status, horario_abertura, horario_fechamento, dias_funcionamento"
+      "id, nome, slug, telefone, whatsapp_numero, endereco, whatsapp_status, horario_abertura, horario_fechamento, dias_funcionamento, capacidade_por_horario"
     )
     .eq("slug", slug)
+    // Conta congelada: o link público sai do ar junto.
+    .eq("status", "ativo")
     .maybeSingle();
   if (!data) return null;
   return {
@@ -55,6 +58,7 @@ export async function petshopPorSlug(slug: string): Promise<PetshopPublico | nul
       abertura: String(data.horario_abertura).slice(0, 5),
       fechamento: String(data.horario_fechamento).slice(0, 5),
       dias: data.dias_funcionamento ?? HORARIO_PADRAO.dias,
+      capacidade: data.capacidade_por_horario ?? 1,
     },
   };
 }
@@ -93,8 +97,8 @@ export type Cobertura = { planoNome: string; saldo: number; creditosMes: number 
 
 export type DadosAgendamento = {
   tutorNome: string;
-  pets: { id: string; nome: string; especie: string; planoNome: string | null }[];
-  servicos: { id: string; nome: string; duracaoMin: number; precoCentavos: number }[];
+  pets: { id: string; nome: string; especie: string; porte: string | null; planoNome: string | null }[];
+  servicos: { id: string; nome: string; duracaoMin: number; precoCentavos: number; precos: PrecosServico }[];
   /** petId -> servicoId -> cobertura (só quando há assinatura ativa). */
   coberturas: Record<string, Record<string, Cobertura>>;
 };
@@ -110,14 +114,14 @@ export async function dadosAgendamento(
     admin.from("tutores").select("nome").eq("id", tutorId).eq("petshop_id", petshopId).eq("ativo", true).maybeSingle(),
     admin
       .from("pets")
-      .select("id, nome, especie, assinaturas(id, status, planos(nome, creditos_mes, servico_id, ativo))")
+      .select("id, nome, especie, porte, assinaturas(id, status, planos(nome, creditos_mes, servico_id, ativo))")
       .eq("petshop_id", petshopId)
       .eq("tutor_id", tutorId)
       .eq("ativo", true)
       .order("nome"),
     admin
       .from("servicos")
-      .select("id, nome, duracao_min, preco_centavos")
+      .select("id, nome, duracao_min, preco_centavos, preco_pequeno_centavos, preco_medio_centavos, preco_grande_centavos")
       .eq("petshop_id", petshopId)
       .eq("ativo", true)
       .order("preco_centavos"),
@@ -173,6 +177,7 @@ export async function dadosAgendamento(
       id: p.id,
       nome: p.nome,
       especie: p.especie,
+      porte: p.porte,
       planoNome: planoDoPet.get(p.id) ?? null,
     })),
     servicos: (servicos ?? []).map((s) => ({
@@ -180,6 +185,12 @@ export async function dadosAgendamento(
       nome: s.nome,
       duracaoMin: s.duracao_min,
       precoCentavos: s.preco_centavos,
+      precos: {
+        preco_centavos: s.preco_centavos,
+        preco_pequeno_centavos: s.preco_pequeno_centavos,
+        preco_medio_centavos: s.preco_medio_centavos,
+        preco_grande_centavos: s.preco_grande_centavos,
+      },
     })),
     coberturas,
   };
@@ -232,7 +243,7 @@ export async function agendarPublico(params: {
   const [{ data: pet }, { data: servico }, dados] = await Promise.all([
     admin
       .from("pets")
-      .select("id, nome")
+      .select("id, nome, porte")
       .eq("id", params.petId)
       .eq("petshop_id", params.petshopId)
       .eq("tutor_id", params.tutorId)
@@ -240,7 +251,7 @@ export async function agendarPublico(params: {
       .maybeSingle(),
     admin
       .from("servicos")
-      .select("id, nome, duracao_min, preco_centavos")
+      .select("id, nome, duracao_min, preco_centavos, preco_pequeno_centavos, preco_medio_centavos, preco_grande_centavos")
       .eq("id", params.servicoId)
       .eq("petshop_id", params.petshopId)
       .eq("ativo", true)
@@ -286,7 +297,25 @@ export async function agendarPublico(params: {
   }
 
   const cobertura = dados.coberturas[params.petId]?.[params.servicoId];
-  const coberto = !!cobertura && cobertura.saldo > 0;
+  // O saldo que vale é o do mês da data escolhida (pode ser o mês que vem).
+  let coberto = !!cobertura && cobertura.saldo > 0;
+  if (cobertura && !inicio.hasSame(DateTime.now().setZone(ZONE), "month")) {
+    const { data: assinatura } = await admin
+      .from("assinaturas")
+      .select("id, planos!inner(servico_id)")
+      .eq("pet_id", params.petId)
+      .eq("status", "ativa")
+      .eq("planos.servico_id", params.servicoId)
+      .limit(1)
+      .maybeSingle();
+    if (assinatura) {
+      const { data: saldo } = await admin.rpc("saldo_plano", {
+        p_assinatura_id: assinatura.id,
+        p_competencia: inicio.startOf("month").toISODate(),
+      });
+      coberto = typeof saldo === "number" && saldo > 0;
+    }
+  }
 
   if (coberto) {
     const { data: id, error } = await admin.rpc("agendar_com_plano", {
@@ -311,6 +340,7 @@ export async function agendarPublico(params: {
   }
 
   const fim = inicio.plus({ minutes: servico.duracao_min });
+  const preco = precoParaPorte(servico, pet.porte);
   const { data: criado, error } = await admin
     .from("agendamentos")
     .insert({
@@ -319,7 +349,7 @@ export async function agendarPublico(params: {
       servico_id: params.servicoId,
       inicio: inicio.toUTC().toISO(),
       fim: fim.toUTC().toISO(),
-      valor_centavos: servico.preco_centavos,
+      valor_centavos: preco,
       observacoes: "Agendado pelo link público",
     })
     .select("id")
@@ -338,6 +368,6 @@ export async function agendarPublico(params: {
     servicoNome: servico.nome,
     coberto: false,
     planoNome: null,
-    valorCentavos: servico.preco_centavos,
+    valorCentavos: preco,
   };
 }

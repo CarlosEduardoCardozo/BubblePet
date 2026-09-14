@@ -139,7 +139,7 @@ function FechamentoTutorPdf({ dados }: { dados: FechamentoPdfInput }) {
                 <Text style={s.cValor}>Valor</Text>
               </View>
               {pet.servicos.flatMap((sv) =>
-                sv.datas.map((d, idx) => (
+                sv.datas.flatMap((d, idx) => [
                   <View key={`${sv.nome}-${idx}`} style={s.linha}>
                     <Text style={s.cData}>
                       {d.data} <Text style={{ color: MUTED }}>{d.diaSemana}</Text>
@@ -148,8 +148,15 @@ function FechamentoTutorPdf({ dados }: { dados: FechamentoPdfInput }) {
                     <Text style={[s.cValor, d.coberto ? { color: TEAL } : {}]}>
                       {d.coberto ? "incluso no plano" : formatCentavos(d.valorCentavos)}
                     </Text>
-                  </View>
-                ))
+                  </View>,
+                  ...d.adicionais.map((extra, j) => (
+                    <View key={`${sv.nome}-${idx}-extra-${j}`} style={s.linha}>
+                      <Text style={s.cData}> </Text>
+                      <Text style={[s.cDesc, { color: MUTED }]}>+ {extra.descricao}</Text>
+                      <Text style={s.cValor}>{formatCentavos(extra.valorCentavos)}</Text>
+                    </View>
+                  )),
+                ])
               )}
               {pet.mensalidades.map((m, idx) => (
                 <View key={`m-${idx}`} style={s.linha}>

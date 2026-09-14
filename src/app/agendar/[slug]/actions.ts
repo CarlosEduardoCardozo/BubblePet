@@ -137,6 +137,6 @@ export async function confirmarAgendamento(
   return resultado;
 }
 
-export async function sairSessao(): Promise<void> {
-  await encerrarSessaoTutor();
+export async function sairSessao(slug: string): Promise<void> {
+  await encerrarSessaoTutor(slug);
 }

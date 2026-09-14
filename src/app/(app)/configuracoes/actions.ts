@@ -31,6 +31,11 @@ const petshopFields = z.object({
   horario_abertura: z.string().regex(HORA_RE, "Horário de abertura inválido"),
   horario_fechamento: z.string().regex(HORA_RE, "Horário de fechamento inválido"),
   dias: z.array(z.coerce.number().int().min(1).max(7)).min(1, "Marque ao menos um dia"),
+  capacidade_por_horario: z.coerce
+    .number()
+    .int()
+    .min(1, "Pelo menos 1 atendimento por horário")
+    .max(20, "No máximo 20 atendimentos por horário"),
 });
 
 export async function updatePetshop(formData: FormData): Promise<ActionResult> {
@@ -43,6 +48,7 @@ export async function updatePetshop(formData: FormData): Promise<ActionResult> {
     horario_abertura: formData.get("horario_abertura"),
     horario_fechamento: formData.get("horario_fechamento"),
     dias: formData.getAll("dias"),
+    capacidade_por_horario: formData.get("capacidade_por_horario") ?? 1,
   });
   if (!parsed.success) {
     return { error: parsed.error.issues[0]?.message ?? "Dados inválidos" };
@@ -72,6 +78,7 @@ export async function updatePetshop(formData: FormData): Promise<ActionResult> {
       horario_abertura: parsed.data.horario_abertura,
       horario_fechamento: parsed.data.horario_fechamento,
       dias_funcionamento: Array.from(new Set(parsed.data.dias)).sort(),
+      capacidade_por_horario: parsed.data.capacidade_por_horario,
     })
     .eq("id", petshopId);
   if (error) return { error: mensagemErroBanco(error) };

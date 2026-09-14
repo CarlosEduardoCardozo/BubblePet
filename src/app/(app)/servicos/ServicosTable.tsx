@@ -19,6 +19,7 @@ import { SearchInput } from "@/components/shared/SearchInput";
 import { Pagination } from "@/components/shared/Pagination";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { formatCentavos } from "@/lib/currency";
+import { resumoPrecos, temPrecoPorPorte } from "@/lib/servico-preco";
 import { ServicoSheet } from "./ServicoSheet";
 import { deleteServico } from "./actions";
 
@@ -27,6 +28,9 @@ export type Servico = {
   nome: string;
   duracao_min: number;
   preco_centavos: number;
+  preco_pequeno_centavos: number | null;
+  preco_medio_centavos: number | null;
+  preco_grande_centavos: number | null;
   planosQueUsam: number;
   atendimentosMes: number;
 };
@@ -127,7 +131,18 @@ export function ServicosTable({
                 <TableRow key={servico.id}>
                   <TableCell className="font-medium">{servico.nome}</TableCell>
                   <TableCell>{servico.duracao_min} min</TableCell>
-                  <TableCell>{formatCentavos(servico.preco_centavos)}</TableCell>
+                  <TableCell>
+                    {temPrecoPorPorte(servico) ? (
+                      <span className="flex flex-col text-sm">
+                        <span>{resumoPrecos(servico)}</span>
+                        <span className="text-xs text-muted-foreground">
+                          sem porte: {formatCentavos(servico.preco_centavos)}
+                        </span>
+                      </span>
+                    ) : (
+                      formatCentavos(servico.preco_centavos)
+                    )}
+                  </TableCell>
                   <TableCell className="hidden md:table-cell">
                     {servico.planosQueUsam === 0 ? (
                       <span className="text-xs text-muted-foreground">—</span>

@@ -3,7 +3,7 @@ import { nomeFeriado } from "@/lib/feriados-br";
 
 export const ZONE = "America/Sao_Paulo";
 
-export type Ocupado = { inicio: string; fim: string };
+export type Ocupado = { id?: string; inicio: string; fim: string };
 
 export type HorarioFuncionamento = {
   /** "08:00" */
@@ -12,6 +12,8 @@ export type HorarioFuncionamento = {
   fechamento: string;
   /** 1=segunda ... 7=domingo (ISO/luxon) */
   dias: number[];
+  /** Quantos atendimentos cabem ao mesmo tempo (padrão 1). */
+  capacidade?: number;
 };
 
 export const HORARIO_PADRAO: HorarioFuncionamento = {
@@ -33,9 +35,39 @@ export function diaAberto(dataISO: string, horario: HorarioFuncionamento): boole
   return true;
 }
 
+type Intervalo = { inicio: DateTime; fim: DateTime };
+
+/**
+ * Cabe mais um atendimento em [inicio, fim)? Conta quantos acontecem ao mesmo
+ * tempo (não só quantos se sobrepõem) — mesma regra do trigger
+ * checar_capacidade_agenda no banco.
+ */
+function cabe(inicio: DateTime, fim: DateTime, intervalos: Intervalo[], capacidade: number): boolean {
+  const sobrepostos = intervalos.filter((o) => inicio < o.fim && fim > o.inicio);
+  if (sobrepostos.length < capacidade) return true;
+  const pontos = [inicio, ...sobrepostos.filter((o) => o.inicio > inicio).map((o) => o.inicio)];
+  const maximo = Math.max(
+    ...pontos.map((t) => sobrepostos.filter((o) => o.inicio <= t && o.fim > t).length)
+  );
+  return maximo + 1 <= capacidade;
+}
+
+export function horarioCabe(
+  inicio: DateTime,
+  duracaoMin: number,
+  ocupados: Ocupado[],
+  capacidade = 1
+): boolean {
+  const intervalos = ocupados.map((o) => ({
+    inicio: DateTime.fromISO(o.inicio),
+    fim: DateTime.fromISO(o.fim),
+  }));
+  return cabe(inicio, inicio.plus({ minutes: duracaoMin }), intervalos, Math.max(1, capacidade));
+}
+
 /**
  * Horários de início livres num dia, em passos de `stepMin`, que cabem antes
- * do fechamento, não sobrepõem nenhum `ocupado` e respeitam a antecedência
+ * do fechamento, respeitam a capacidade do horário e respeitam a antecedência
  * mínima em relação a `agora`. Puro: mesma função pro painel da agenda e pro
  * link público.
  */
@@ -59,6 +91,7 @@ export function calcularHorariosLivres(opts: {
   const abertura = dia.set(hm(horario.abertura));
   const fechamento = dia.set(hm(horario.fechamento));
   const minimo = agora.plus({ minutes: antecedenciaMin });
+  const capacidade = Math.max(1, horario.capacidade ?? 1);
 
   const intervalos = ocupados.map((o) => ({
     inicio: DateTime.fromISO(o.inicio).setZone(ZONE),
@@ -73,8 +106,7 @@ export function calcularHorariosLivres(opts: {
   ) {
     if (inicio < minimo) continue;
     const fim = inicio.plus({ minutes: duracaoMin });
-    const conflita = intervalos.some((o) => inicio < o.fim && fim > o.inicio);
-    if (!conflita) livres.push(inicio);
+    if (cabe(inicio, fim, intervalos, capacidade)) livres.push(inicio);
   }
   return livres;
 }

@@ -1,6 +1,7 @@
 import "server-only";
 
 import { DateTime } from "luxon";
+import type { Adicional } from "@/lib/adicionais";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   calcularFechamentos,
@@ -21,13 +22,14 @@ function um<T>(v: Um<T>): T | undefined {
 }
 
 const SELECT_AGENDAMENTO =
-  "id, inicio, valor_centavos, origem_plano, pets(id, nome, tutor_id), servicos(nome, preco_centavos)";
+  "id, inicio, valor_centavos, origem_plano, adicionais, pets(id, nome, tutor_id), servicos(nome, preco_centavos)";
 
 type LinhaAgendamento = {
   id: string;
   inicio: string;
   valor_centavos: number | null;
   origem_plano: boolean;
+  adicionais: Adicional[] | null;
   pets: unknown;
   servicos: unknown;
 };
@@ -43,6 +45,7 @@ function paraAgendamentos(rows: LinhaAgendamento[] | null): AgendamentoConcluido
       inicio: row.inicio,
       valor_centavos: row.valor_centavos,
       origem_plano: row.origem_plano,
+      adicionais: row.adicionais ?? [],
       pet,
       servico,
     });
@@ -173,7 +176,9 @@ export async function carregarPendencias(
   return {
     pendencias: fechamentos.map((f) => ({
       ...f,
-      agendamentoIds: f.itens.flatMap((i) => (i.agendamentoId ? [i.agendamentoId] : [])),
+      agendamentoIds: Array.from(
+        new Set(f.itens.flatMap((i) => (i.agendamentoId ? [i.agendamentoId] : [])))
+      ),
     })),
     tutores,
   };

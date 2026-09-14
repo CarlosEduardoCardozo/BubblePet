@@ -10,6 +10,8 @@ export type DataBanho = {
   diaSemana: string;
   coberto: boolean;
   valorCentavos: number;
+  /** Extras do mesmo atendimento (desembolo...). */
+  adicionais: { descricao: string; valorCentavos: number }[];
 };
 
 export type GrupoServico = {
@@ -20,6 +22,7 @@ export type GrupoServico = {
   /** Preço por banho quando todos os avulsos custaram o mesmo; senão null. */
   valorUnitarioCentavos: number | null;
   cobertos: number;
+  adicionaisCentavos: number;
 };
 
 export type GrupoPet = {
@@ -32,6 +35,7 @@ export type ResumoFechamento = {
   pets: GrupoPet[];
   totalBanhos: number;
   totalCentavos: number;
+  totalAdicionaisCentavos: number;
   /** Primeira e última data de banho ("26/08" … "15/09"), se houver. */
   periodo: { inicio: string; fim: string; inicioISO: string; fimISO: string } | null;
 };
@@ -56,23 +60,47 @@ export function resumirFechamento(itens: ItemFechamento[]): ResumoFechamento {
     .filter((i) => i.tipo === "servico" && i.data)
     .sort((a, b) => a.data!.localeCompare(b.data!));
 
+  const porAgendamento = new Map<string, { data: DataBanho; grupo: GrupoServico }>();
   for (const i of servicosOrdenados) {
     const g = pet(i.petNome);
     let s = g.servicos.find((x) => x.nome === i.descricao);
     if (!s) {
-      s = { nome: i.descricao, datas: [], quantidade: 0, subtotalCentavos: 0, valorUnitarioCentavos: null, cobertos: 0 };
+      s = {
+        nome: i.descricao,
+        datas: [],
+        quantidade: 0,
+        subtotalCentavos: 0,
+        valorUnitarioCentavos: null,
+        cobertos: 0,
+        adicionaisCentavos: 0,
+      };
       g.servicos.push(s);
     }
     const dt = DateTime.fromISO(i.data!).setZone(ZONE).setLocale("pt-BR");
-    s.datas.push({
+    const data: DataBanho = {
       data: dt.toFormat("dd/LL"),
       diaSemana: dt.toFormat("ccc").replace(".", ""),
       coberto: !!i.cobertoPlano,
       valorCentavos: i.valorCentavos,
-    });
+      adicionais: [],
+    };
+    s.datas.push(data);
+    if (i.agendamentoId) porAgendamento.set(i.agendamentoId, { data, grupo: s });
     s.quantidade += 1;
     s.subtotalCentavos += i.valorCentavos;
     if (i.cobertoPlano) s.cobertos += 1;
+  }
+
+  let totalAdicionais = 0;
+  for (const i of itens.filter((x) => x.tipo === "adicional")) {
+    totalAdicionais += i.valorCentavos;
+    const alvo = i.agendamentoId ? porAgendamento.get(i.agendamentoId) : undefined;
+    if (alvo) {
+      alvo.data.adicionais.push({ descricao: i.descricao, valorCentavos: i.valorCentavos });
+      alvo.grupo.adicionaisCentavos += i.valorCentavos;
+    } else {
+      pet(i.petNome).mensalidades.push({ descricao: i.descricao, valorCentavos: i.valorCentavos });
+    }
   }
 
   for (const g of pets.values()) {
@@ -95,6 +123,7 @@ export function resumirFechamento(itens: ItemFechamento[]): ResumoFechamento {
     pets: Array.from(pets.values()),
     totalBanhos: servicosOrdenados.length,
     totalCentavos: itens.reduce((s, i) => s + i.valorCentavos, 0),
+    totalAdicionaisCentavos: totalAdicionais,
     periodo:
       primeiro && ultimo
         ? {

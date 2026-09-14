@@ -1,4 +1,5 @@
 import QRCode from "qrcode";
+import Link from "next/link";
 import { appUrl } from "@/lib/app-url";
 import { garantirWebhook } from "@/lib/whatsapp";
 import { createClient } from "@/lib/supabase/server";
@@ -7,14 +8,19 @@ import { PetshopForm } from "./PetshopForm";
 import { LinkPublicoCard } from "./LinkPublicoCard";
 import { WhatsappCard, type MensagemLog } from "./WhatsappCard";
 
-export default async function ConfiguracoesPage() {
+export default async function ConfiguracoesPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ bemvindo?: string }>;
+}) {
+  const { bemvindo } = await searchParams;
   const supabase = await createClient();
 
   const [{ data: petshop, error }, { data: mensagens }] = await Promise.all([
     supabase
       .from("petshops")
       .select(
-        "id, nome, telefone, endereco, chave_pix, dia_fechamento, slug, horario_abertura, horario_fechamento, dias_funcionamento, whatsapp_status, whatsapp_numero, whatsapp_profile_nome"
+        "id, nome, telefone, endereco, chave_pix, dia_fechamento, slug, horario_abertura, horario_fechamento, dias_funcionamento, capacidade_por_horario, whatsapp_status, whatsapp_numero, whatsapp_profile_nome"
       )
       .single(),
     supabase
@@ -56,6 +62,20 @@ export default async function ConfiguracoesPage() {
         description="Dados do petshop, horário de funcionamento, link de agendamento e WhatsApp."
       />
 
+      {bemvindo && (
+        <div className="rounded-[12px] border border-primary/30 bg-primary/5 px-4 py-3 text-sm">
+          <p className="font-semibold text-primary">Conta criada! Bem-vindo ao BubblePet 🐾</p>
+          <ol className="mt-1 list-decimal pl-5 text-muted-foreground">
+            <li>Confira o horário de funcionamento e a chave PIX aqui embaixo.</li>
+            <li>Conecte o WhatsApp do petshop lendo o QR code.</li>
+            <li>
+              Cadastre os serviços em <Link href="/servicos" className="text-primary underline">Serviços</Link>{" "}
+              e os clientes em <Link href="/tutores-pets" className="text-primary underline">Clientes e pets</Link>.
+            </li>
+          </ol>
+        </div>
+      )}
+
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="lg:col-span-2">
           <PetshopForm
@@ -68,6 +88,7 @@ export default async function ConfiguracoesPage() {
               horario_abertura: String(petshop.horario_abertura).slice(0, 5),
               horario_fechamento: String(petshop.horario_fechamento).slice(0, 5),
               dias_funcionamento: petshop.dias_funcionamento ?? [1, 2, 3, 4, 5, 6],
+              capacidade_por_horario: petshop.capacidade_por_horario ?? 1,
             }}
           />
         </div>

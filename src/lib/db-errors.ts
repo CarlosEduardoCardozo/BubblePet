@@ -19,7 +19,8 @@ export function mensagemErroBanco(
     case "23514":
       return "Algum valor está fora do permitido. Confira os campos.";
     case "23P01":
-      return "Já existe um agendamento nesse horário.";
+      // Vem do trigger de capacidade, já em português ("lotado", "já existe").
+      return error.message?.includes("horário") ? error.message : "Esse horário já está ocupado.";
     case "PGRST116":
       return "Registro não encontrado.";
     default:

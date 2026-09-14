@@ -30,6 +30,7 @@ export type PetshopFormData = {
   horario_abertura: string;
   horario_fechamento: string;
   dias_funcionamento: number[];
+  capacidade_por_horario: number;
 };
 
 export function PetshopForm({ petshop }: { petshop: PetshopFormData }) {
@@ -119,7 +120,7 @@ export function PetshopForm({ petshop }: { petshop: PetshopFormData }) {
 
           <div className="flex flex-col gap-3 rounded-[12px] border border-border bg-muted/30 p-4">
             <span className="text-sm font-medium">Funcionamento</span>
-            <div className="grid gap-4 sm:grid-cols-3">
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="horario_abertura">Abre às</Label>
                 <Input
@@ -141,6 +142,21 @@ export function PetshopForm({ petshop }: { petshop: PetshopFormData }) {
                   defaultValue={petshop.horario_fechamento}
                   required
                 />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="capacidade_por_horario">Banhos ao mesmo tempo</Label>
+                <Input
+                  id="capacidade_por_horario"
+                  name="capacidade_por_horario"
+                  type="number"
+                  min={1}
+                  max={20}
+                  defaultValue={petshop.capacidade_por_horario}
+                  required
+                />
+                <span className="text-xs text-muted-foreground">
+                  Quantos pets dá pra atender no mesmo horário.
+                </span>
               </div>
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="dia_fechamento">Fecha o mês no dia</Label>

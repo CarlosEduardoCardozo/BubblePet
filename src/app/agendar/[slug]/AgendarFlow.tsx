@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { formatCentavos } from "@/lib/currency";
+import { precoParaPorte } from "@/lib/servico-preco";
 import type { DadosAgendamento } from "@/lib/publico/dal";
 import {
   confirmarAgendamento,
@@ -162,7 +163,7 @@ function PassoIdentificacao({ slug, petshop }: { slug: string; petshop: Petshop 
         <Titulo>Digite o código</Titulo>
         <p className="text-sm text-muted-foreground">
           Se <span className="font-medium text-foreground">{telefone}</span> estiver cadastrado no{" "}
-          {petshop.nome}, o código de 6 dígitos chega pelo WhatsApp em instantes. Vale por 5 minutos.
+          {petshop.nome}, o código de 6 dígitos chega pelo WhatsApp em instantes. Vale por 5 minutos — é só dessa vez: depois este celular fica lembrado.
         </p>
         <form onSubmit={confirmar} className="mt-4 flex flex-col gap-3">
           <Input
@@ -198,8 +199,8 @@ function PassoIdentificacao({ slug, petshop }: { slug: string; petshop: Petshop 
     <Cartao>
       <Titulo>Agende o banho do seu pet</Titulo>
       <p className="text-sm text-muted-foreground">
-        Digite o celular cadastrado no {petshop.nome}. Você recebe um código pelo
-        WhatsApp e escolhe o horário em menos de um minuto.
+        Digite o celular cadastrado no {petshop.nome}. Na primeira vez, você recebe um
+        código pelo WhatsApp; depois este celular fica lembrado e é só escolher o horário.
       </p>
       <form onSubmit={pedirCodigo} className="mt-4 flex flex-col gap-3">
         <Input
@@ -254,6 +255,8 @@ function PassoAgendar({
 
   const servico = dados.servicos.find((s) => s.id === servicoId) ?? null;
   const cobertura = petId && servicoId ? dados.coberturas[petId]?.[servicoId] : undefined;
+  const porteDoPet = dados.pets.find((p) => p.id === petId)?.porte ?? null;
+  const precoDe = (s: DadosAgendamento["servicos"][number]) => precoParaPorte(s.precos, porteDoPet);
   const coberto = !!cobertura && cobertura.saldo > 0;
   const primeiroNome = dados.tutorNome.split(" ")[0];
 
@@ -369,7 +372,7 @@ function PassoAgendar({
           className="text-xs text-muted-foreground underline"
           onClick={() =>
             startTransition(async () => {
-              await sairSessao();
+              await sairSessao(slug);
               router.refresh();
             })
           }
@@ -449,11 +452,11 @@ function PassoAgendar({
                       incluso no plano
                     </span>
                     <span className="text-xs text-muted-foreground line-through">
-                      {formatCentavos(s.precoCentavos)}
+                      {formatCentavos(precoDe(s))}
                     </span>
                   </span>
                 ) : (
-                  <span className="font-medium">{formatCentavos(s.precoCentavos)}</span>
+                  <span className="font-medium">{formatCentavos(precoDe(s))}</span>
                 )}
               </button>
             );
@@ -473,7 +476,7 @@ function PassoAgendar({
             {coberto ? "Você paga" : "Valor"}
           </p>
           <p className="text-4xl font-semibold leading-tight [font-family:var(--font-display)]">
-            {formatCentavos(coberto ? 0 : servico.precoCentavos)}
+            {formatCentavos(coberto ? 0 : precoDe(servico))}
           </p>
           <p className="mt-1 text-sm opacity-90">
             {coberto

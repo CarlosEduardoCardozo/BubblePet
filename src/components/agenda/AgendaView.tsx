@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState, useRef } from "react";
+import { useCallback, useEffect, useState, useRef } from "react";
 import { DateTime } from "luxon";
 import { Plus, Gift, SlidersHorizontal, PawPrint } from "lucide-react";
 import FullCalendar from "@fullcalendar/react";
@@ -31,17 +31,28 @@ import { nomeFeriado } from "@/lib/feriados-br";
 import { ZONE, type HorarioFuncionamento } from "@/lib/agenda/slots";
 import { moverAgendamento } from "@/app/(app)/agenda/actions";
 import { STATUS_COLORS, STATUS_LABELS, type AgendamentoStatus } from "@/lib/agendamento";
+import { lerAdicionais, type Adicional } from "@/lib/adicionais";
 
 // Cores e rótulos moram em src/lib/agendamento.ts (módulo simples, usado
 // também por server components); re-exportados aqui pelos imports antigos.
 export { STATUS_COLORS, STATUS_LABELS };
 
-export type PetOption = { id: string; nome: string; tutorNome: string };
+export type PetOption = {
+  id: string;
+  nome: string;
+  tutorId: string;
+  tutorNome: string;
+  porte: string | null;
+};
+export type TutorOption = { id: string; nome: string; telefone: string | null };
 export type ServicoOption = {
   id: string;
   nome: string;
   duracao_min: number;
   preco_centavos: number;
+  preco_pequeno_centavos: number | null;
+  preco_medio_centavos: number | null;
+  preco_grande_centavos: number | null;
 };
 
 export type AgendamentoEvent = {
@@ -57,6 +68,9 @@ export type AgendamentoEvent = {
   servicoNome: string;
   origemPlano: boolean;
   valorCentavos: number | null;
+  adicionais: Adicional[];
+  /** Já entrou num extrato enviado ou pago: valores congelados. */
+  cobrado: boolean;
 };
 
 function hm(valor: string): { hour: number; minute: number } {
@@ -89,11 +103,13 @@ function comFolga(valor: string, horas: number): string {
 
 export function AgendaView({
   pets,
+  tutores,
   servicos,
   horario,
   whatsappConectado,
 }: {
   pets: PetOption[];
+  tutores: TutorOption[];
   servicos: ServicoOption[];
   horario: HorarioFuncionamento;
   whatsappConectado: boolean;
@@ -111,13 +127,20 @@ export function AgendaView({
   const [viewType, setViewType] = useState<AgendaViewType>("timeGridWeek");
   const rangeRef = useRef<{ start: Date; end: Date } | null>(null);
 
+  // No celular a semana inteira não cabe: abre no dia.
+  useEffect(() => {
+    if (window.matchMedia("(max-width: 767px)").matches) {
+      calendarRef.current?.getApi().changeView("timeGridDay");
+    }
+  }, []);
+
   const carregarEventos = useCallback(async (start: Date, end: Date) => {
     setCarregando(true);
     const supabase = createClient();
     const { data, error } = await supabase
       .from("agendamentos")
       .select(
-        "id, inicio, fim, status, observacoes, pet_id, servico_id, origem_plano, valor_centavos, pets(nome, tutores(nome)), servicos(nome)"
+        "id, inicio, fim, status, observacoes, pet_id, servico_id, origem_plano, valor_centavos, adicionais, pets(nome, tutores(nome)), servicos(nome), fechamentos(status, enviado_em)"
       )
       .gte("inicio", start.toISOString())
       .lt("inicio", end.toISOString())
@@ -136,6 +159,8 @@ export function AgendaView({
           tutores: { nome: string } | null;
         } | null;
         const servico = row.servicos as unknown as { nome: string } | null;
+        const fechamento = row.fechamentos as unknown as { status: string; enviado_em: string | null } | null;
+        const extras = lerAdicionais(row.adicionais);
         return {
           id: row.id,
           status: row.status as AgendamentoStatus,
@@ -149,6 +174,8 @@ export function AgendaView({
           servicoNome: servico?.nome ?? "",
           origemPlano: row.origem_plano,
           valorCentavos: row.valor_centavos,
+          adicionais: extras.ok ? extras.adicionais : [],
+          cobrado: !!fechamento && (fechamento.status === "pago" || !!fechamento.enviado_em),
         };
       })
     );
@@ -214,6 +241,7 @@ export function AgendaView({
   function renderEventContent(arg: EventContentArg) {
     const plano = arg.event.extendedProps.origemPlano as boolean;
     const servico = arg.event.extendedProps.servicoNome as string;
+    const extras = arg.event.extendedProps.extras as number;
     const curto = arg.event.end && arg.event.start
       ? arg.event.end.getTime() - arg.event.start.getTime() <= 30 * 60_000
       : false;
@@ -228,7 +256,8 @@ export function AgendaView({
           </div>
           {!curto && (
             <div className="truncate text-[11px] text-muted-foreground">
-              {servico} · {arg.timeText}
+              {servico}
+              {extras > 0 && ` +${extras}`} · {arg.timeText}
             </div>
           )}
         </div>
@@ -292,8 +321,8 @@ export function AgendaView({
 
   const detalhe = events.find((e) => e.id === detalheId) ?? null;
   const ocupados = events
-    .filter((e) => e.status !== "cancelado")
-    .map((e) => ({ inicio: e.inicio, fim: e.fim }));
+    .filter((e) => e.status !== "cancelado" && e.status !== "faltou")
+    .map((e) => ({ id: e.id, inicio: e.inicio, fim: e.fim }));
   const duracaoMinima = servicos.length
     ? Math.min(...servicos.map((s) => s.duracao_min))
     : 30;
@@ -390,7 +419,7 @@ export function AgendaView({
               selectMirror
               editable
               eventDurationEditable={false}
-              eventOverlap={false}
+              eventOverlap={(horario.capacidade ?? 1) > 1}
               slotEventOverlap={false}
               nowIndicator
               height="100%"
@@ -412,6 +441,7 @@ export function AgendaView({
                   status: e.status,
                   origemPlano: e.origemPlano,
                   servicoNome: e.servicoNome,
+                  extras: e.adicionais.length,
                 },
               }))}
             />
@@ -432,6 +462,7 @@ export function AgendaView({
         onOpenChange={(open) => !open && setNovoSlot(null)}
         slot={novoSlot}
         pets={pets}
+        tutores={tutores}
         servicos={servicos}
         horario={horario}
         ocupados={ocupados}
@@ -447,6 +478,7 @@ export function AgendaView({
         onOpenChange={(open) => !open && setDetalheId(null)}
         agendamento={detalhe}
         servicos={servicos}
+        pets={pets}
         horario={horario}
         ocupados={ocupados}
         onChanged={() => {

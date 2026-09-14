@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import { DateTime } from "luxon";
 import { toast } from "sonner";
-import { Check, CheckCheck, Pencil, UserX, XCircle } from "lucide-react";
+import { Check, CheckCheck, Pencil, Plus, UserX, XCircle } from "lucide-react";
 import {
   Sheet,
   SheetContent,
@@ -20,7 +20,13 @@ import { StatusBadge } from "@/components/shared/StatusBadge";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { FormSelect } from "@/components/shared/FormSelect";
 import { formatCentavos } from "@/lib/currency";
-import { updateAgendamento, updateAgendamentoStatus } from "@/app/(app)/agenda/actions";
+import {
+  atualizarAdicionais,
+  updateAgendamento,
+  updateAgendamentoStatus,
+} from "@/app/(app)/agenda/actions";
+import { somaAdicionais } from "@/lib/adicionais";
+import { precoParaPorte } from "@/lib/servico-preco";
 import { STATUS_LABELS, type AgendamentoStatus } from "@/lib/agendamento";
 import {
   calcularHorariosLivres,
@@ -29,13 +35,20 @@ import {
   type Ocupado,
 } from "@/lib/agenda/slots";
 import { LembreteButton } from "./LembreteButton";
-import type { AgendamentoEvent, ServicoOption } from "./AgendaView";
+import {
+  AdicionaisEditor,
+  adicionaisDasLinhas,
+  linhasDeAdicionais,
+  type LinhaAdicional,
+} from "./AdicionaisEditor";
+import type { AgendamentoEvent, PetOption, ServicoOption } from "./AgendaView";
 
 export function AgendamentoDetailSheet({
   open,
   onOpenChange,
   agendamento,
   servicos,
+  pets,
   horario,
   ocupados,
   onChanged,
@@ -44,6 +57,7 @@ export function AgendamentoDetailSheet({
   onOpenChange: (open: boolean) => void;
   agendamento: AgendamentoEvent | null;
   servicos: ServicoOption[];
+  pets: PetOption[];
   horario: HorarioFuncionamento;
   ocupados: Ocupado[];
   onChanged: () => void;
@@ -53,6 +67,8 @@ export function AgendamentoDetailSheet({
   const [editando, setEditando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const [edicao, setEdicao] = useState({ data: "", hora: "", servicoId: "", observacoes: "" });
+  const [editandoExtras, setEditandoExtras] = useState(false);
+  const [linhasExtras, setLinhasExtras] = useState<LinhaAdicional[]>([]);
 
   // Mantém o último agendamento durante a animação de fechar, senão o título
   // pisca vazio.
@@ -60,6 +76,7 @@ export function AgendamentoDetailSheet({
   if (agendamento && agendamento !== ultimo) {
     setUltimo(agendamento);
     setEditando(false);
+    setEditandoExtras(false);
     setErro(null);
   }
   const dados = agendamento ?? ultimo;
@@ -117,15 +134,48 @@ export function AgendamentoDetailSheet({
     });
   }
 
+  function iniciarExtras() {
+    if (!dados) return;
+    const linhas = linhasDeAdicionais(dados.adicionais);
+    setLinhasExtras(linhas.length ? linhas : []);
+    setErro(null);
+    setEditandoExtras(true);
+  }
+
+  function salvarExtras() {
+    if (!dados) return;
+    const extras = adicionaisDasLinhas(linhasExtras);
+    if (!extras.ok) {
+      setErro(extras.erro);
+      return;
+    }
+    const id = dados.id;
+    startTransition(async () => {
+      const result = await atualizarAdicionais(id, extras.adicionais);
+      if ("error" in result) {
+        setErro(result.error);
+      } else {
+        toast.success(extras.adicionais.length ? "Adicionais salvos." : "Adicionais removidos.");
+        setEditandoExtras(false);
+        onChanged();
+      }
+    });
+  }
+
   const inicio = dados ? DateTime.fromISO(dados.inicio).setZone(ZONE).setLocale("pt-BR") : null;
   const fim = dados ? DateTime.fromISO(dados.fim).setZone(ZONE) : null;
   const encerrado = dados?.status === "concluido" || dados?.status === "cancelado" || dados?.status === "faltou";
+  const porte = dados ? (pets.find((p) => p.id === dados.petId)?.porte ?? null) : null;
+  const totalExtras = somaAdicionais(dados?.adicionais);
+  // Extras podem entrar até depois do banho, enquanto não foram cobrados.
+  const podeEditarExtras =
+    !!dados && !dados.cobrado && dados.status !== "cancelado" && dados.status !== "faltou";
 
   // Horários livres pro dia da edição, ignorando o próprio agendamento.
   const servicoEdicao = servicos.find((s) => s.id === edicao.servicoId) ?? null;
   const duracaoEdicao = servicoEdicao?.duracao_min ?? 30;
   const ocupadosSemEste = dados
-    ? ocupados.filter((o) => !(o.inicio === dados.inicio && o.fim === dados.fim))
+    ? ocupados.filter((o) => o.id !== dados.id)
     : ocupados;
   const horariosEdicao = (() => {
     if (!editando || !edicao.data) return [] as string[];
@@ -191,7 +241,10 @@ export function AgendamentoDetailSheet({
                 {dados.origemPlano ? (
                   <>
                     <span className="font-medium text-primary">Coberto pelo plano</span>
-                    <span className="text-muted-foreground"> — 1 crédito do mês. Sem cobrança.</span>
+                    <span className="text-muted-foreground">
+                      {" — 1 crédito do mês."}
+                      {totalExtras > 0 ? " Só os adicionais são cobrados." : " Sem cobrança."}
+                    </span>
                   </>
                 ) : (
                   <>
@@ -205,6 +258,65 @@ export function AgendamentoDetailSheet({
                   </>
                 )}
               </div>
+
+              {editandoExtras ? (
+                <div className="flex flex-col gap-2 rounded-[12px] border border-border p-3">
+                  <span className="text-sm font-medium">Adicionais</span>
+                  <AdicionaisEditor
+                    linhas={linhasExtras}
+                    onChange={setLinhasExtras}
+                    sugestoesExtras={servicos.filter((s) => s.id !== dados.servicoId).map((s) => s.nome)}
+                    disabled={isPending}
+                  />
+                  {erro && (
+                    <p role="alert" className="rounded-[12px] bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                      {erro}
+                    </p>
+                  )}
+                  <div className="flex justify-end gap-2">
+                    <Button variant="ghost" size="sm" onClick={() => setEditandoExtras(false)} disabled={isPending}>
+                      Voltar
+                    </Button>
+                    <Button size="sm" onClick={salvarExtras} disabled={isPending}>
+                      {isPending ? "Salvando..." : "Salvar adicionais"}
+                    </Button>
+                  </div>
+                </div>
+              ) : dados.adicionais.length > 0 ? (
+                <div className="flex flex-col gap-1 rounded-[12px] border border-border px-3 py-2 text-sm">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-muted-foreground">Adicionais</span>
+                    {podeEditarExtras && (
+                      <Button variant="ghost" size="sm" className="h-6 px-2 text-xs" onClick={iniciarExtras}>
+                        <Pencil size={12} /> Editar
+                      </Button>
+                    )}
+                  </div>
+                  {dados.adicionais.map((a, i) => (
+                    <div key={i} className="flex justify-between">
+                      <span>+ {a.descricao}</span>
+                      <span>{formatCentavos(a.valorCentavos)}</span>
+                    </div>
+                  ))}
+                  <div className="flex justify-between border-t border-border pt-1 font-semibold">
+                    <span>Total do atendimento</span>
+                    <span>{formatCentavos((dados.origemPlano ? 0 : (dados.valorCentavos ?? 0)) + totalExtras)}</span>
+                  </div>
+                  {dados.cobrado && (
+                    <span className="text-xs text-muted-foreground">Já cobrado num extrato enviado.</span>
+                  )}
+                </div>
+              ) : (
+                podeEditarExtras && (
+                  <button
+                    type="button"
+                    onClick={iniciarExtras}
+                    className="flex items-center gap-1 self-start text-sm font-medium text-primary hover:underline"
+                  >
+                    <Plus size={14} /> Cobrar um adicional (desembolo, hidratação...)
+                  </button>
+                )
+              )}
 
               {dados.observacoes && (
                 <div className="flex flex-col gap-0.5 text-sm">
@@ -275,7 +387,6 @@ export function AgendamentoDetailSheet({
                     value={edicao.hora}
                     onValueChange={(hora) => setEdicao((v) => ({ ...v, hora }))}
                     placeholder="Escolha"
-                    searchable={horariosEdicao.length > 12}
                     options={horariosEdicao.map((h) => ({ value: h, label: h }))}
                   />
                 </div>
@@ -291,7 +402,7 @@ export function AgendamentoDetailSheet({
                   options={servicos.map((s) => ({
                     value: s.id,
                     label: s.nome,
-                    hint: `${s.duracao_min} min · ${formatCentavos(s.preco_centavos)}`,
+                    hint: `${s.duracao_min} min · ${formatCentavos(precoParaPorte(s, porte))}`,
                   }))}
                 />
                 {dados.origemPlano && (

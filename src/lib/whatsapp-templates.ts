@@ -1,6 +1,7 @@
 import { DateTime } from "luxon";
 import { formatCentavos } from "@/lib/currency";
 import type { ResumoFechamento } from "@/lib/fechamento/resumo";
+import type { Adicional } from "@/lib/adicionais";
 
 const ZONE = "America/Sao_Paulo";
 
@@ -41,12 +42,22 @@ export function templateConfirmacao(args: {
   inicioISO: string;
   valorCentavos: number;
   planoNome?: string | null;
+  adicionais?: Adicional[];
 }): string {
   const { data, hora, diaSemana } = dataHora(args.inicioISO);
-  const valor = args.planoNome
-    ? `Coberto pelo plano *${args.planoNome}* — sem custo.`
-    : `Valor: *${formatCentavos(args.valorCentavos)}*.`;
-  return `Oi, ${primeiroNome(args.tutorNome)}! 🐾\n\nAgendamento em *${args.petshopNome}*:\n\n• Pet: *${args.petNome}*\n• Serviço: ${args.servicoNome}\n• ${diaSemana}, ${data} às *${hora}*\n\n${valor}\n\nPode confirmar se vem?`;
+  const extras = args.adicionais ?? [];
+  const totalExtras = extras.reduce((s, a) => s + a.valorCentavos, 0);
+  const linhasExtras = extras.map((a) => `• + ${a.descricao}: ${formatCentavos(a.valorCentavos)}`).join("\n");
+  let valor: string;
+  if (args.planoNome) {
+    valor = totalExtras > 0
+      ? `Banho coberto pelo plano *${args.planoNome}*. Adicionais: *${formatCentavos(totalExtras)}*.`
+      : `Coberto pelo plano *${args.planoNome}* — sem custo.`;
+  } else {
+    valor = `Valor: *${formatCentavos(args.valorCentavos + totalExtras)}*.`;
+  }
+  const blocoExtras = linhasExtras ? `\n${linhasExtras}` : "";
+  return `Oi, ${primeiroNome(args.tutorNome)}! 🐾\n\nAgendamento em *${args.petshopNome}*:\n\n• Pet: *${args.petNome}*\n• Serviço: ${args.servicoNome}${blocoExtras}\n• ${diaSemana}, ${data} às *${hora}*\n\n${valor}\n\nPode confirmar se vem?`;
 }
 
 export function templateLembrete(args: {
@@ -93,7 +104,10 @@ export function templateFechamento(args: {
   for (const { pet, s } of grupos) {
     linhas.push(`*${pet}* — ${s.nome}`);
     for (const d of s.datas) {
-      linhas.push(`• ${d.data} (${d.diaSemana})${d.coberto ? " — incluso no plano" : ""}`);
+      const extras = d.adicionais
+        .map((a) => ` + ${a.descricao} ${formatCentavos(a.valorCentavos)}`)
+        .join("");
+      linhas.push(`• ${d.data} (${d.diaSemana})${d.coberto ? " — incluso no plano" : ""}${extras}`);
     }
     const avulsos = s.quantidade - s.cobertos;
     // Com mais de um pet/serviço, cada bloco mostra o próprio subtotal.
@@ -124,6 +138,9 @@ export function templateFechamento(args: {
           : ` — ${avulsos} × ${formatCentavos(unico.valorUnitarioCentavos)} e ${unico.cobertos} ${unico.cobertos === 1 ? "incluído" : "incluídos"} no plano`;
     }
     foram = `Foram ${resumo.totalBanhos} ${palavra(resumo.totalBanhos)}${detalhe}\n`;
+  }
+  if (resumo.totalAdicionaisCentavos > 0) {
+    foram += `Adicionais: ${formatCentavos(resumo.totalAdicionaisCentavos)}\n`;
   }
   const pix = args.chavePix ? `\n💳 Pix: ${args.chavePix}\n` : "";
 
