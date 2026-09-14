@@ -32,7 +32,7 @@ export async function updateSession(request: NextRequest) {
   } = await supabase.auth.getUser();
 
   const pathname = request.nextUrl.pathname;
-  const isAuthRoute = pathname.startsWith("/login");
+  const isAuthRoute = pathname.startsWith("/login") || pathname.startsWith("/cadastro");
   // Link público de agendamento e route handlers não dependem da sessão do
   // petshop: /agendar tem a própria sessão (cookie do tutor) e cada /api
   // autentica sozinho.

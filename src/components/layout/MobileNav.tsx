@@ -6,7 +6,7 @@ import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Brand, NavLinks } from "./Sidebar";
 
-export function MobileNav() {
+export function MobileNav({ admin = false }: { admin?: boolean }) {
   const [open, setOpen] = useState(false);
 
   return (
@@ -27,7 +27,7 @@ export function MobileNav() {
           <div className="flex h-14 items-center px-4">
             <Brand />
           </div>
-          <NavLinks onNavigate={() => setOpen(false)} />
+          <NavLinks admin={admin} onNavigate={() => setOpen(false)} />
         </SheetContent>
       </Sheet>
     </>

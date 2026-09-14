@@ -63,6 +63,15 @@ export async function POST(request: Request, { params }: { params: Promise<{ seg
   if (!instancia) return new Response("Não encontrado", { status: 404 });
   const petshopId = instancia.petshop_id as string;
 
+  // Conta congelada: não mexe na agenda nem responde ninguém.
+  const { data: ativo } = await admin
+    .from("petshops")
+    .select("id")
+    .eq("id", petshopId)
+    .eq("status", "ativo")
+    .maybeSingle();
+  if (!ativo) return new Response("ok");
+
   let body: Record<string, unknown>;
   try {
     body = await request.json();

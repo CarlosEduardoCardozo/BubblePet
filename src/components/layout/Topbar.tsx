@@ -19,14 +19,16 @@ export function Topbar({
   petshopNome,
   donoNome,
   whatsappConectado,
+  admin = false,
 }: {
   petshopNome: string;
   donoNome: string;
   whatsappConectado: boolean;
+  admin?: boolean;
 }) {
   return (
     <header className="sticky top-0 z-20 flex h-14 items-center gap-2 border-b border-border bg-white px-4 md:px-6">
-      <MobileNav />
+      <MobileNav admin={admin} />
       <span className="truncate font-semibold text-foreground">{petshopNome}</span>
 
       <div className="ml-auto flex items-center gap-1">
