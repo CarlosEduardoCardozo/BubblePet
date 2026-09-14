@@ -136,9 +136,9 @@ export default async function DashboardPage() {
         />
         <MetricCard
           icon={Landmark}
-          label="Previsto no mês"
+          label="Movimento do mês"
           value={formatCentavos(totais.previstoCentavos)}
-          hint={`${totais.atendimentos} atendimento${totais.atendimentos === 1 ? "" : "s"} concluído${totais.atendimentos === 1 ? "" : "s"} + mensalidades`}
+          hint={`${totais.atendimentos} atendimento${totais.atendimentos === 1 ? "" : "s"} realizado${totais.atendimentos === 1 ? "" : "s"} + mensalidades`}
           href="/financeiro"
         />
         <MetricCard
@@ -240,7 +240,7 @@ export default async function DashboardPage() {
             </Link>
             <div className="mt-2 rounded-[8px] bg-primary/5 px-3 py-2.5 text-xs text-muted-foreground">
               <span className="font-medium text-foreground">Planos este mês:</span>{" "}
-              {totais.atendimentosCobertos} de {totais.atendimentos} atendimentos concluídos foram
+              {totais.atendimentosCobertos} de {totais.atendimentos} atendimentos realizados foram
               cobertos por plano.
             </div>
           </CardContent>

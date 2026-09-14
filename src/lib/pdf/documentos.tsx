@@ -12,6 +12,7 @@ import {
 import { formatCentavos } from "@/lib/currency";
 import { formatPhoneBR } from "@/lib/phone";
 import type { ItemFechamento } from "@/lib/fechamento/calcular";
+import { resumirFechamento } from "@/lib/fechamento/resumo";
 
 const TEAL = "#0d9488";
 const INK = "#0f172a";
@@ -40,7 +41,8 @@ const s = StyleSheet.create({
   tabela: { borderWidth: 1, borderColor: LINE, borderRadius: 4, overflow: "hidden" },
   linha: { flexDirection: "row", paddingVertical: 6, paddingHorizontal: 8, borderBottomWidth: 1, borderBottomColor: LINE },
   cabecalho: { backgroundColor: SOFT, fontFamily: "Helvetica-Bold", fontSize: 8, color: MUTED, textTransform: "uppercase" },
-  cData: { width: 60 },
+  cData: { width: 80 },
+  pet: { fontSize: 12, fontFamily: "Helvetica-Bold", marginBottom: 5 },
   cPet: { width: 90 },
   cDesc: { flex: 1 },
   cValor: { width: 80, textAlign: "right" },
@@ -85,10 +87,19 @@ export type FechamentoPdfInput = {
 };
 
 function FechamentoTutorPdf({ dados }: { dados: FechamentoPdfInput }) {
-  const mensalidades = dados.itens.filter((i) => i.tipo === "mensalidade");
-  const servicos = dados.itens.filter((i) => i.tipo === "servico");
+  const resumo = resumirFechamento(dados.itens);
+  const ano = DateTime.fromISO(dados.competencia).toFormat("yyyy");
+  const subtitulo = resumo.periodo
+    ? resumo.periodo.inicio === resumo.periodo.fim
+      ? `${resumo.periodo.inicio}/${ano}`
+      : `${resumo.periodo.inicio} a ${resumo.periodo.fim}/${ano}`
+    : mesExtenso(dados.competencia);
+  const tudoBanho = resumo.pets.every((p) => p.servicos.every((sv) => sv.nome.toLowerCase().includes("banho")));
+  const palavra = (n: number) =>
+    tudoBanho ? `banho${n === 1 ? "" : "s"}` : `atendimento${n === 1 ? "" : "s"}`;
+
   return (
-    <Document title={`Extrato ${mesExtenso(dados.competencia)} — ${dados.tutor.nome}`}>
+    <Document title={`Fechamento ${subtitulo} — ${dados.tutor.nome}`}>
       <Page size="A4" style={s.page}>
         <View style={s.header}>
           <View>
@@ -100,8 +111,8 @@ function FechamentoTutorPdf({ dados }: { dados: FechamentoPdfInput }) {
             </Text>
           </View>
           <View>
-            <Text style={s.titulo}>Extrato do mês</Text>
-            <Text style={s.tituloSub}>{mesExtenso(dados.competencia)}</Text>
+            <Text style={s.titulo}>Fechamento</Text>
+            <Text style={s.tituloSub}>{subtitulo}</Text>
           </View>
         </View>
 
@@ -118,43 +129,47 @@ function FechamentoTutorPdf({ dados }: { dados: FechamentoPdfInput }) {
           </View>
         </View>
 
-        <View style={s.tabela}>
-          <View style={[s.linha, s.cabecalho]}>
-            <Text style={s.cData}>Data</Text>
-            <Text style={s.cPet}>Pet</Text>
-            <Text style={s.cDesc}>Descrição</Text>
-            <Text style={s.cValor}>Valor</Text>
-          </View>
-          {mensalidades.map((i, idx) => (
-            <View key={`m${idx}`} style={s.linha}>
-              <Text style={s.cData}>—</Text>
-              <Text style={s.cPet}>{i.petNome}</Text>
-              <Text style={s.cDesc}>{i.descricao}</Text>
-              <Text style={s.cValor}>{formatCentavos(i.valorCentavos)}</Text>
-            </View>
-          ))}
-          {servicos.map((i, idx) => (
-            <View key={`s${idx}`} style={s.linha}>
-              <Text style={s.cData}>
-                {i.data ? DateTime.fromISO(i.data).setZone("America/Sao_Paulo").toFormat("dd/LL HH:mm") : "—"}
-              </Text>
-              <Text style={s.cPet}>{i.petNome}</Text>
-              <View style={s.cDesc}>
-                <Text>{i.descricao}</Text>
-                {i.cobertoPlano && <Text style={s.coberto}>coberto pelo plano</Text>}
+        {resumo.pets.map((pet) => (
+          <View key={pet.petNome} style={{ marginBottom: 12 }} wrap={false}>
+            <Text style={s.pet}>{pet.petNome}</Text>
+            <View style={s.tabela}>
+              <View style={[s.linha, s.cabecalho]}>
+                <Text style={s.cData}>Data</Text>
+                <Text style={s.cDesc}>Serviço</Text>
+                <Text style={s.cValor}>Valor</Text>
               </View>
-              <Text style={s.cValor}>{i.cobertoPlano ? "incluso" : formatCentavos(i.valorCentavos)}</Text>
+              {pet.servicos.flatMap((sv) =>
+                sv.datas.map((d, idx) => (
+                  <View key={`${sv.nome}-${idx}`} style={s.linha}>
+                    <Text style={s.cData}>
+                      {d.data} <Text style={{ color: MUTED }}>{d.diaSemana}</Text>
+                    </Text>
+                    <Text style={s.cDesc}>{sv.nome}</Text>
+                    <Text style={[s.cValor, d.coberto ? { color: TEAL } : {}]}>
+                      {d.coberto ? "incluso no plano" : formatCentavos(d.valorCentavos)}
+                    </Text>
+                  </View>
+                ))
+              )}
+              {pet.mensalidades.map((m, idx) => (
+                <View key={`m-${idx}`} style={s.linha}>
+                  <Text style={s.cData}>—</Text>
+                  <Text style={s.cDesc}>{m.descricao}</Text>
+                  <Text style={s.cValor}>{formatCentavos(m.valorCentavos)}</Text>
+                </View>
+              ))}
             </View>
-          ))}
-          {dados.itens.length === 0 && (
-            <View style={s.linha}>
-              <Text style={{ color: MUTED }}>Sem movimentação neste mês.</Text>
-            </View>
-          )}
-        </View>
+          </View>
+        ))}
+
+        {resumo.pets.length === 0 && (
+          <Text style={{ color: MUTED, marginBottom: 12 }}>Sem movimentação neste período.</Text>
+        )}
 
         <View style={s.total}>
-          <Text style={s.totalRotulo}>Total do mês</Text>
+          <Text style={s.totalRotulo}>
+            {resumo.totalBanhos > 0 ? `Foram ${resumo.totalBanhos} ${palavra(resumo.totalBanhos)}` : "Total"}
+          </Text>
           <Text style={s.totalValor}>{formatCentavos(dados.totalCentavos)}</Text>
         </View>
 
@@ -163,7 +178,7 @@ function FechamentoTutorPdf({ dados }: { dados: FechamentoPdfInput }) {
             <Text style={s.rotulo}>Como pagar</Text>
             {dados.petshop.chave_pix ? (
               <>
-                <Text>PIX para a chave: </Text>
+                <Text>Pix para a chave:</Text>
                 <Text style={{ fontFamily: "Helvetica-Bold", fontSize: 11, marginTop: 2 }}>
                   {dados.petshop.chave_pix}
                 </Text>
@@ -226,7 +241,7 @@ function RelatorioMensalPdf({ dados }: { dados: RelatorioPdfInput }) {
 
         <View style={s.kpis}>
           <View style={s.kpi}>
-            <Text style={s.rotulo}>Faturamento previsto</Text>
+            <Text style={s.rotulo}>Movimento do mês</Text>
             <Text style={s.kpiValor}>{formatCentavos(dados.previstoCentavos)}</Text>
           </View>
           <View style={s.kpi}>
@@ -241,7 +256,7 @@ function RelatorioMensalPdf({ dados }: { dados: RelatorioPdfInput }) {
 
         <View style={s.kpis}>
           <View style={s.kpi}>
-            <Text style={s.rotulo}>Atendimentos concluídos</Text>
+            <Text style={s.rotulo}>Atendimentos realizados</Text>
             <Text style={s.kpiValor}>{dados.atendimentos}</Text>
             <Text style={{ color: MUTED }}>{dados.atendimentosCobertos} coberto{dados.atendimentosCobertos === 1 ? "" : "s"} por plano</Text>
           </View>
@@ -273,7 +288,7 @@ function RelatorioMensalPdf({ dados }: { dados: RelatorioPdfInput }) {
           ))}
           {dados.porServico.length === 0 && (
             <View style={s.linha}>
-              <Text style={{ color: MUTED }}>Nenhum atendimento concluído no mês.</Text>
+              <Text style={{ color: MUTED }}>Nenhum atendimento realizado no mês.</Text>
             </View>
           )}
         </View>
@@ -316,5 +331,5 @@ export function nomeArquivoExtrato(competencia: string, tutorNome: string): stri
     .replace(/[^a-zA-Z0-9]+/g, "-")
     .replace(/^-|-$/g, "")
     .toLowerCase();
-  return `extrato-${mes}-${nome || "cliente"}.pdf`;
+  return `fechamento-${mes}-${nome || "cliente"}.pdf`;
 }

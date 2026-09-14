@@ -59,18 +59,27 @@ export type FechamentoRow = {
   mensalidades: number;
   enviadoEm: string | null;
   pagoEm: string | null;
+  periodoInicio: string | null;
+  periodoFim: string | null;
 };
 
 type Resumo = {
-  previstoCentavos: number;
+  aFecharCentavos: number;
+  clientesAFechar: number;
+  aguardandoCentavos: number;
+  extratosAguardando: number;
   recebidoCentavos: number;
-  emAbertoCentavos: number;
-  atendimentos: number;
+  atendimentosNoMes: number;
   atendimentosCobertos: number;
-  mensalidadesCentavos: number;
-  clientesComMovimento: number;
   pendentes: number;
 };
+
+function periodoLabel(inicio: string | null, fim: string | null): string {
+  if (!inicio || !fim) return "—";
+  const i = DateTime.fromISO(inicio).toFormat("dd/LL");
+  const f = DateTime.fromISO(fim).toFormat("dd/LL");
+  return i === f ? i : `${i} a ${f}`;
+}
 
 function MetricCard({
   icon: Icon,
@@ -137,10 +146,10 @@ export function FinanceiroView({
         return;
       }
       const partes = [];
-      if (r.gerados) partes.push(`${r.gerados} novo${r.gerados === 1 ? "" : "s"}`);
+      if (r.gerados) partes.push(`${r.gerados} extrato${r.gerados === 1 ? "" : "s"} novo${r.gerados === 1 ? "" : "s"}`);
       if (r.atualizados) partes.push(`${r.atualizados} atualizado${r.atualizados === 1 ? "" : "s"}`);
-      if (r.pagosMantidos) partes.push(`${r.pagosMantidos} pago${r.pagosMantidos === 1 ? "" : "s"} mantido${r.pagosMantidos === 1 ? "" : "s"}`);
-      toast.success(partes.length ? `Fechamento gerado: ${partes.join(", ")}.` : "Nada a fechar neste mês.");
+      if (r.removidos) partes.push(`${r.removidos} removido${r.removidos === 1 ? "" : "s"} (nada mais a cobrar)`);
+      toast.success(partes.length ? `Fechamento pronto: ${partes.join(", ")}. Revise e envie.` : "Nada a cobrar agora.");
       router.refresh();
     });
   }
@@ -175,9 +184,9 @@ export function FinanceiroView({
 
   function enviarTodos() {
     setConfirmEnvio(false);
-    const ids = fechamentos.filter((f) => f.status === "aberto").map((f) => f.id);
+    const ids = rascunhos.map((f) => f.id);
     if (ids.length === 0) {
-      toast.info("Nenhum extrato em aberto para enviar.");
+      toast.info("Nenhum extrato novo para enviar.");
       return;
     }
     void enviarLote(ids);
@@ -210,14 +219,16 @@ export function FinanceiroView({
     });
   }
 
-  const abertos = fechamentos.filter((f) => f.status === "aberto");
+  // Rascunho = gerado e ainda não enviado. "Enviar" em lote só manda estes;
+  // reenviar um já enviado é pelo botão da linha.
+  const rascunhos = fechamentos.filter((f) => f.status === "aberto" && !f.enviadoEm);
   const ocupado = isPending || !!enviando;
 
   return (
     <div className="flex flex-col gap-6">
       <PageHeader
         title="Financeiro"
-        description="Fechamento do mês: extrato por cliente, envio pelo WhatsApp e controle de pagamento."
+        description="Junta os banhos que já passaram e ainda não foram cobrados, manda o extrato pelo WhatsApp e controla quem pagou."
         action={
           <div className="flex items-center gap-1 rounded-[8px] border border-border bg-white p-0.5">
             <Button variant="ghost" size="icon-sm" onClick={() => irParaMes(-1)} aria-label="Mês anterior">
@@ -239,28 +250,28 @@ export function FinanceiroView({
 
       <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
         <MetricCard
-          icon={Landmark}
-          label="Previsto no mês"
-          value={formatCentavos(resumo.previstoCentavos)}
-          hint={`${formatCentavos(resumo.mensalidadesCentavos)} em mensalidades`}
+          icon={Receipt}
+          label="A fechar"
+          value={formatCentavos(resumo.aFecharCentavos)}
+          hint={`${resumo.clientesAFechar} cliente${resumo.clientesAFechar === 1 ? "" : "s"} com algo a cobrar`}
+        />
+        <MetricCard
+          icon={Send}
+          label="Aguardando pagamento"
+          value={formatCentavos(resumo.aguardandoCentavos)}
+          hint={`${resumo.extratosAguardando} extrato${resumo.extratosAguardando === 1 ? "" : "s"} enviado${resumo.extratosAguardando === 1 ? "" : "s"}`}
         />
         <MetricCard
           icon={Wallet}
           label="Recebido"
           value={formatCentavos(resumo.recebidoCentavos)}
-          hint={`${fechamentos.filter((f) => f.status === "pago").length} extrato${fechamentos.filter((f) => f.status === "pago").length === 1 ? "" : "s"} pago${fechamentos.filter((f) => f.status === "pago").length === 1 ? "" : "s"}`}
+          hint={`extratos de ${mesLabel.toLowerCase()} pagos`}
           destaque
         />
         <MetricCard
-          icon={Receipt}
-          label="Em aberto"
-          value={formatCentavos(resumo.emAbertoCentavos)}
-          hint={`${abertos.length} extrato${abertos.length === 1 ? "" : "s"}`}
-        />
-        <MetricCard
-          icon={Check}
-          label="Atendimentos concluídos"
-          value={String(resumo.atendimentos)}
+          icon={Landmark}
+          label="Atendimentos no mês"
+          value={String(resumo.atendimentosNoMes)}
           hint={`${resumo.atendimentosCobertos} coberto${resumo.atendimentosCobertos === 1 ? "" : "s"} por plano`}
         />
       </div>
@@ -283,30 +294,30 @@ export function FinanceiroView({
             <RefreshCw size={16} className="mt-0.5 shrink-0 text-primary" />
             <span>
               <span className="font-medium">
-                {resumo.pendentes} cliente{resumo.pendentes === 1 ? "" : "s"} com movimento ainda não fechado
+                {resumo.pendentes} cliente{resumo.pendentes === 1 ? "" : "s"} com banhos ainda não cobrados
               </span>
               <span className="text-muted-foreground">
                 {" "}
-                — atendimentos concluídos e mensalidades de {mesLabel.toLowerCase()} que não estão nos extratos.
+                — entram todos os atendimentos que já passaram (menos cancelados e faltas) e as mensalidades de planos.
               </span>
             </span>
           </div>
           <Button onClick={gerar} disabled={ocupado}>
             {isPending ? <Loader2 size={16} className="animate-spin" /> : <Receipt size={16} />}
-            {fechamentos.length ? "Atualizar fechamento" : "Gerar fechamento"}
+            {rascunhos.length ? "Atualizar fechamento" : "Gerar fechamento"}
           </Button>
         </div>
       )}
 
       <div className="flex flex-wrap items-center gap-2">
-        {resumo.pendentes === 0 && resumo.clientesComMovimento > 0 && (
+        {resumo.pendentes === 0 && rascunhos.length > 0 && (
           <Button variant="outline" onClick={gerar} disabled={ocupado}>
             <RefreshCw size={16} /> Recalcular
           </Button>
         )}
         <Button
           onClick={() => setConfirmEnvio(true)}
-          disabled={ocupado || abertos.length === 0 || !petshop.whatsappConectado}
+          disabled={ocupado || rascunhos.length === 0 || !petshop.whatsappConectado}
           title={!petshop.whatsappConectado ? "Conecte o WhatsApp em Configurações" : undefined}
         >
           {enviando ? (
@@ -315,7 +326,7 @@ export function FinanceiroView({
             </>
           ) : (
             <>
-              <Send size={16} /> Enviar {abertos.length > 0 ? `${abertos.length} extrato${abertos.length === 1 ? "" : "s"}` : "extratos"} pelo WhatsApp
+              <Send size={16} /> Enviar {rascunhos.length > 0 ? `${rascunhos.length} extrato${rascunhos.length === 1 ? "" : "s"} novo${rascunhos.length === 1 ? "" : "s"}` : "extratos"} pelo WhatsApp
             </>
           )}
         </Button>
@@ -345,11 +356,11 @@ export function FinanceiroView({
       </div>
 
       {fechamentos.length === 0 ? (
-        resumo.clientesComMovimento > 0 ? (
+        resumo.clientesAFechar > 0 ? (
           <EmptyState
             icon={Receipt}
-            title={`Nenhum extrato gerado para ${mesLabel.toLowerCase()}`}
-            description={`${resumo.clientesComMovimento} cliente${resumo.clientesComMovimento === 1 ? " tem" : "s têm"} atendimentos concluídos ou mensalidade neste mês. Gere o fechamento para criar os extratos, revisar e enviar.`}
+            title="Nenhum extrato gerado neste mês"
+            description={`${resumo.clientesAFechar} cliente${resumo.clientesAFechar === 1 ? " tem" : "s têm"} banhos que já passaram e ainda não foram cobrados. Gere o fechamento pra conferir os valores e enviar.`}
             action={
               <Button onClick={gerar} disabled={ocupado}>
                 <Receipt size={16} /> Gerar fechamento
@@ -359,8 +370,8 @@ export function FinanceiroView({
         ) : (
           <EmptyState
             icon={Landmark}
-            title={`Sem movimento em ${mesLabel.toLowerCase()}`}
-            description="Atendimentos marcados como concluídos na agenda e mensalidades de planos ativos aparecem aqui. Nada entrou ainda neste mês."
+            title="Nada a cobrar agora"
+            description="Quando um banho marcado na agenda passar, ele aparece aqui pra entrar no próximo fechamento do cliente."
           />
         )
       ) : (
@@ -369,6 +380,7 @@ export function FinanceiroView({
             <TableHeader>
               <TableRow>
                 <TableHead>Cliente</TableHead>
+                <TableHead className="hidden sm:table-cell">Período</TableHead>
                 <TableHead className="hidden md:table-cell">Itens</TableHead>
                 <TableHead>Total</TableHead>
                 <TableHead>Situação</TableHead>
@@ -384,10 +396,13 @@ export function FinanceiroView({
                       <span className="text-xs text-muted-foreground">{formatPhoneBR(f.tutorTelefone)}</span>
                     </div>
                   </TableCell>
+                  <TableCell className="hidden text-sm sm:table-cell">
+                    {periodoLabel(f.periodoInicio, f.periodoFim)}
+                  </TableCell>
                   <TableCell className="hidden text-sm text-muted-foreground md:table-cell">
                     {[
                       f.mensalidades > 0 && `${f.mensalidades} mensalidade${f.mensalidades === 1 ? "" : "s"}`,
-                      f.servicos > 0 && `${f.servicos} atendimento${f.servicos === 1 ? "" : "s"}`,
+                      f.servicos > 0 && `${f.servicos} banho${f.servicos === 1 ? "" : "s"}`,
                     ]
                       .filter(Boolean)
                       .join(" · ") || "—"}
@@ -399,15 +414,19 @@ export function FinanceiroView({
                         <Badge variant="secondary" className="bg-success/10 text-success">
                           <Check size={12} /> Pago
                         </Badge>
-                      ) : (
+                      ) : f.enviadoEm ? (
                         <Badge variant="secondary" className="bg-warning/15 text-warning-foreground">
-                          Em aberto
+                          Aguardando pagamento
                         </Badge>
+                      ) : (
+                        <Badge variant="secondary">Não enviado</Badge>
                       )}
                       <span className="text-[11px] text-muted-foreground">
-                        {f.enviadoEm
-                          ? `enviado ${DateTime.fromISO(f.enviadoEm).setZone(ZONE).toFormat("dd/LL HH:mm")}`
-                          : "não enviado"}
+                        {f.status === "pago" && f.pagoEm
+                          ? `pago ${DateTime.fromISO(f.pagoEm).setZone(ZONE).toFormat("dd/LL")}`
+                          : f.enviadoEm
+                            ? `enviado ${DateTime.fromISO(f.enviadoEm).setZone(ZONE).toFormat("dd/LL HH:mm")}`
+                            : "confira e envie"}
                       </span>
                     </div>
                   </TableCell>
@@ -426,7 +445,13 @@ export function FinanceiroView({
                       <Button
                         variant="ghost"
                         size="icon"
-                        title={petshop.whatsappConectado ? "Enviar pelo WhatsApp" : "Conecte o WhatsApp em Configurações"}
+                        title={
+                          !petshop.whatsappConectado
+                            ? "Conecte o WhatsApp em Configurações"
+                            : f.enviadoEm
+                              ? "Reenviar pelo WhatsApp"
+                              : "Enviar pelo WhatsApp"
+                        }
                         aria-label={`Enviar extrato de ${f.tutorNome}`}
                         disabled={ocupado || !petshop.whatsappConectado}
                         onClick={() => enviarUm(f.id)}
@@ -461,8 +486,8 @@ export function FinanceiroView({
       <ConfirmDialog
         open={confirmEnvio}
         onOpenChange={setConfirmEnvio}
-        title={`Enviar ${abertos.length} extrato${abertos.length === 1 ? "" : "s"} pelo WhatsApp?`}
-        description={`Cada cliente com extrato em aberto recebe o PDF de ${mesLabel.toLowerCase()} com o total${petshop.temPix ? " e a chave PIX" : ""}. Quem já recebeu recebe de novo.`}
+        title={`Enviar ${rascunhos.length} extrato${rascunhos.length === 1 ? "" : "s"} pelo WhatsApp?`}
+        description={`Cada cliente recebe uma mensagem com as datas dos banhos, o total${petshop.temPix ? " e a chave Pix" : ""}, e o PDF logo abaixo. Depois de enviado, o extrato não muda mais — banhos novos vão pro próximo.`}
         confirmLabel="Enviar agora"
         pendingLabel="Enviando..."
         confirmVariant="default"

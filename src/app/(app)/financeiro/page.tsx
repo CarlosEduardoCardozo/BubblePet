@@ -1,8 +1,8 @@
 import { DateTime } from "luxon";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentPetshopId } from "@/lib/supabase/petshop";
-import { competenciaDe, totalizar } from "@/lib/fechamento/calcular";
-import { carregarBaseFechamento } from "@/lib/fechamento/carregar";
+import { competenciaDe, totalizar, ZONE } from "@/lib/fechamento/calcular";
+import { carregarBaseFechamento, carregarPendencias } from "@/lib/fechamento/carregar";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { FinanceiroView, type FechamentoRow } from "./FinanceiroView";
 
@@ -22,22 +22,39 @@ export default async function FinanceiroPage({
       ? `${mes}-01`
       : competenciaDe();
 
+  const agora = DateTime.now().setZone(ZONE);
+  const fimMes = DateTime.fromISO(competencia, { zone: ZONE }).endOf("month");
+  const corte = (fimMes < agora ? fimMes : agora).toUTC().toISO()!;
+
   const supabase = await createClient();
   const petshopId = await getCurrentPetshopId(supabase);
 
-  const [{ data: rows, error }, base, { data: petshop }] = await Promise.all([
-    supabase
-      .from("fechamentos")
-      .select("id, tutor_id, total_centavos, status, itens, enviado_em, pago_em, atualizado_em, tutores(nome, telefone)")
-      .eq("competencia", competencia)
-      .order("total_centavos", { ascending: false }),
-    carregarBaseFechamento(supabase, petshopId, competencia),
-    supabase
-      .from("petshops")
-      .select("chave_pix, telefone, whatsapp_status")
-      .eq("id", petshopId)
-      .single(),
-  ]);
+  const [{ data: rows, error }, { data: rascunhos }, { data: aguardando }, base, { data: petshop }] =
+    await Promise.all([
+      supabase
+        .from("fechamentos")
+        .select(
+          "id, tutor_id, total_centavos, status, itens, enviado_em, pago_em, periodo_inicio, periodo_fim, tutores(nome, telefone)"
+        )
+        .eq("competencia", competencia)
+        .order("criado_em", { ascending: false }),
+      supabase
+        .from("fechamentos")
+        .select("id, tutor_id, total_centavos")
+        .eq("status", "aberto")
+        .is("enviado_em", null),
+      supabase
+        .from("fechamentos")
+        .select("total_centavos")
+        .eq("status", "aberto")
+        .not("enviado_em", "is", null),
+      carregarBaseFechamento(supabase, petshopId, competencia),
+      supabase
+        .from("petshops")
+        .select("chave_pix, telefone, whatsapp_status")
+        .eq("id", petshopId)
+        .single(),
+    ]);
 
   if (error) {
     return (
@@ -50,7 +67,12 @@ export default async function FinanceiroPage({
     );
   }
 
-  const totais = totalizar(base.fechamentos);
+  const { pendencias } = await carregarPendencias(supabase, petshopId, {
+    competencia,
+    corte,
+    rascunhoIds: (rascunhos ?? []).map((r) => r.id),
+  });
+
   const fechamentos: FechamentoRow[] = (rows ?? []).map((r) => {
     const tutor = um(r.tutores as Um<{ nome: string; telefone: string }>);
     const itens = (r.itens as { tipo: string }[]) ?? [];
@@ -65,35 +87,32 @@ export default async function FinanceiroPage({
       mensalidades: itens.filter((i) => i.tipo === "mensalidade").length,
       enviadoEm: r.enviado_em,
       pagoEm: r.pago_em,
+      periodoInicio: r.periodo_inicio,
+      periodoFim: r.periodo_fim,
     };
   });
 
-  // Movimento que ainda não virou extrato (ou mudou depois de gerar).
-  const porTutor = new Map(fechamentos.map((f) => [f.tutorId, f]));
-  const pendentes = base.fechamentos.filter((f) => {
-    const existente = porTutor.get(f.tutorId);
-    return !existente || (existente.status === "aberto" && existente.totalCentavos !== f.totalCentavos);
-  }).length;
+  // O que mudou desde o último "gerar": cliente com algo a cobrar e sem
+  // rascunho, ou com rascunho desatualizado.
+  const rascunhoPorTutor = new Map((rascunhos ?? []).map((r) => [r.tutor_id, r.total_centavos]));
+  const aCobrar = pendencias.filter((p) => p.totalCentavos > 0);
+  const pendentes = aCobrar.filter((p) => rascunhoPorTutor.get(p.tutorId) !== p.totalCentavos).length;
 
-  let recebido = 0;
-  let emAberto = 0;
-  for (const f of fechamentos) {
-    if (f.status === "pago") recebido += f.totalCentavos;
-    else emAberto += f.totalCentavos;
-  }
+  const totais = totalizar(base.fechamentos);
+  const recebido = fechamentos.filter((f) => f.status === "pago").reduce((s, f) => s + f.totalCentavos, 0);
 
   return (
     <FinanceiroView
       competencia={competencia}
       fechamentos={fechamentos}
       resumo={{
-        previstoCentavos: totais.previstoCentavos,
+        aFecharCentavos: aCobrar.reduce((s, p) => s + p.totalCentavos, 0),
+        clientesAFechar: aCobrar.length,
+        aguardandoCentavos: (aguardando ?? []).reduce((s, f) => s + f.total_centavos, 0),
+        extratosAguardando: (aguardando ?? []).length,
         recebidoCentavos: recebido,
-        emAbertoCentavos: emAberto,
-        atendimentos: totais.atendimentos,
+        atendimentosNoMes: totais.atendimentos,
         atendimentosCobertos: totais.atendimentosCobertos,
-        mensalidadesCentavos: totais.mensalidadesCentavos,
-        clientesComMovimento: base.fechamentos.length,
         pendentes,
       }}
       petshop={{

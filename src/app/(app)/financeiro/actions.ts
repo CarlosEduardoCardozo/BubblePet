@@ -4,9 +4,10 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentPetshopId } from "@/lib/supabase/petshop";
 import { mensagemErroBanco } from "@/lib/db-errors";
-import { carregarBaseFechamento } from "@/lib/fechamento/carregar";
+import { carregarPendencias } from "@/lib/fechamento/carregar";
+import { resumirFechamento } from "@/lib/fechamento/resumo";
 import { dadosRelatorio } from "@/lib/fechamento/relatorio";
-import type { ItemFechamento } from "@/lib/fechamento/calcular";
+import { ZONE, type ItemFechamento } from "@/lib/fechamento/calcular";
 import { nomeArquivoExtrato, renderFechamentoPdf, renderRelatorioPdf } from "@/lib/pdf/documentos";
 import { enviarMensagemWhatsapp } from "@/lib/whatsapp";
 import { templateFechamento, templateRelatorio } from "@/lib/whatsapp-templates";
@@ -20,72 +21,102 @@ function validarCompetencia(competencia: string): string | null {
   return COMPETENCIA_RE.test(competencia) && DateTime.fromISO(competencia).isValid ? competencia : null;
 }
 
+/**
+ * Fecha tudo que ainda não foi cobrado até agora (ou até o fim do mês
+ * escolhido, se for um mês passado): um extrato por cliente. O rascunho do
+ * cliente (não enviado) é recalculado; extrato enviado ou pago nunca muda.
+ */
 export async function gerarFechamentos(
   competenciaRaw: string
-): Promise<{ error: string } | { success: true; gerados: number; atualizados: number; pagosMantidos: number }> {
+): Promise<{ error: string } | { success: true; gerados: number; atualizados: number; removidos: number }> {
   const competencia = validarCompetencia(competenciaRaw);
   if (!competencia) return { error: "Mês inválido." };
+
+  const agora = DateTime.now().setZone(ZONE);
+  const fimMes = DateTime.fromISO(competencia, { zone: ZONE }).endOf("month");
+  if (DateTime.fromISO(competencia, { zone: ZONE }) > agora) {
+    return { error: "Não dá pra fechar um mês que ainda não começou." };
+  }
+  const corte = (fimMes < agora ? fimMes : agora).toUTC().toISO()!;
 
   const supabase = await createClient();
   const petshopId = await getCurrentPetshopId(supabase);
 
-  const [base, { data: existentes, error: erroExistentes }] = await Promise.all([
-    carregarBaseFechamento(supabase, petshopId, competencia),
-    supabase
-      .from("fechamentos")
-      .select("id, tutor_id, status")
-      .eq("petshop_id", petshopId)
-      .eq("competencia", competencia),
-  ]);
-  if (erroExistentes) return { error: mensagemErroBanco(erroExistentes) };
+  const { data: rascunhos, error: erroRascunhos } = await supabase
+    .from("fechamentos")
+    .select("id, tutor_id")
+    .eq("petshop_id", petshopId)
+    .eq("status", "aberto")
+    .is("enviado_em", null);
+  if (erroRascunhos) return { error: mensagemErroBanco(erroRascunhos) };
 
-  const porTutor = new Map((existentes ?? []).map((f) => [f.tutor_id, f]));
+  const rascunhoPorTutor = new Map((rascunhos ?? []).map((r) => [r.tutor_id, r.id]));
+  const { pendencias } = await carregarPendencias(supabase, petshopId, {
+    competencia,
+    corte,
+    rascunhoIds: (rascunhos ?? []).map((r) => r.id),
+  });
+
   let gerados = 0;
   let atualizados = 0;
-  let pagosMantidos = 0;
-  const agora = new Date().toISOString();
+  const comExtrato = new Set<string>();
+  const agoraIso = new Date().toISOString();
 
-  for (const f of base.fechamentos) {
-    const existente = porTutor.get(f.tutorId);
-    if (existente?.status === "pago") {
-      pagosMantidos += 1;
-      continue;
-    }
-    if (existente) {
-      const { error } = await supabase
-        .from("fechamentos")
-        .update({ itens: f.itens, total_centavos: f.totalCentavos, atualizado_em: agora })
-        .eq("id", existente.id);
+  for (const p of pendencias) {
+    // Só plano coberto e nada a pagar: não vale mandar "Total R$ 0,00".
+    // Os banhos ficam pendentes e entram no próximo extrato do cliente.
+    if (p.totalCentavos <= 0) continue;
+
+    const resumo = resumirFechamento(p.itens);
+    const campos = {
+      competencia,
+      itens: p.itens,
+      total_centavos: p.totalCentavos,
+      periodo_inicio: resumo.periodo?.inicioISO ?? null,
+      periodo_fim: resumo.periodo?.fimISO ?? null,
+      atualizado_em: agoraIso,
+    };
+
+    let fechamentoId = rascunhoPorTutor.get(p.tutorId);
+    if (fechamentoId) {
+      const { error } = await supabase.from("fechamentos").update(campos).eq("id", fechamentoId);
       if (error) return { error: mensagemErroBanco(error) };
       atualizados += 1;
     } else {
-      const { error } = await supabase.from("fechamentos").insert({
-        petshop_id: petshopId,
-        tutor_id: f.tutorId,
-        competencia,
-        itens: f.itens,
-        total_centavos: f.totalCentavos,
-      });
-      if (error) return { error: mensagemErroBanco(error) };
+      const { data, error } = await supabase
+        .from("fechamentos")
+        .insert({ ...campos, petshop_id: petshopId, tutor_id: p.tutorId })
+        .select("id")
+        .single();
+      if (error || !data) return { error: mensagemErroBanco(error) };
+      fechamentoId = data.id;
       gerados += 1;
+    }
+    comExtrato.add(p.tutorId);
+
+    // Liga os banhos a este extrato e solta os que saíram (ex.: cancelado).
+    if (p.agendamentoIds.length > 0) {
+      await supabase.from("agendamentos").update({ fechamento_id: fechamentoId }).in("id", p.agendamentoIds);
+      await supabase
+        .from("agendamentos")
+        .update({ fechamento_id: null })
+        .eq("fechamento_id", fechamentoId)
+        .not("id", "in", `(${p.agendamentoIds.join(",")})`);
+    } else {
+      await supabase.from("agendamentos").update({ fechamento_id: null }).eq("fechamento_id", fechamentoId);
     }
   }
 
-  // Fechamento aberto de tutor que não tem mais movimento (ex.: atendimento
-  // cancelado depois de gerar) some — só se ainda não foi enviado.
-  const comMovimento = new Set(base.fechamentos.map((f) => f.tutorId));
-  const orfaos = (existentes ?? []).filter((f) => f.status === "aberto" && !comMovimento.has(f.tutor_id));
+  // Rascunho de quem não tem mais nada a cobrar some (os banhos voltam a
+  // ficar pendentes pelo on delete set null).
+  const orfaos = (rascunhos ?? []).filter((r) => !comExtrato.has(r.tutor_id)).map((r) => r.id);
   if (orfaos.length > 0) {
-    await supabase
-      .from("fechamentos")
-      .delete()
-      .in("id", orfaos.map((f) => f.id))
-      .is("enviado_em", null);
+    await supabase.from("fechamentos").delete().in("id", orfaos).is("enviado_em", null);
   }
 
   revalidatePath("/financeiro");
   revalidatePath("/dashboard");
-  return { success: true, gerados, atualizados, pagosMantidos };
+  return { success: true, gerados, atualizados, removidos: orfaos.length };
 }
 
 type Um<T> = T | T[] | null | undefined;
@@ -113,7 +144,7 @@ export async function enviarFechamentos(ids: string[]): Promise<ResultadoEnvioLo
     supabase.from("petshops").select("nome, chave_pix, telefone, endereco").eq("id", petshopId).single(),
     supabase
       .from("fechamentos")
-      .select("id, competencia, itens, total_centavos, status, tutores(nome, telefone)")
+      .select("id, tutor_id, competencia, itens, total_centavos, status, tutores(nome, telefone)")
       .in("id", ids.slice(0, 25)),
   ]);
   if (!petshop) return { enviados: 0, falhas: [{ tutorNome: "—", erro: "Petshop não encontrado." }] };
@@ -122,33 +153,47 @@ export async function enviarFechamentos(ids: string[]): Promise<ResultadoEnvioLo
     const tutor = um(f.tutores as Um<{ nome: string; telefone: string }>);
     if (!tutor) continue;
     try {
+      const itens = f.itens as ItemFechamento[];
       const pdf = await renderFechamentoPdf({
         petshop,
         tutor,
         competencia: f.competencia,
-        itens: f.itens as ItemFechamento[],
+        itens,
         totalCentavos: f.total_centavos,
         status: f.status as "aberto" | "pago",
       });
-      const envio = await enviarMensagemWhatsapp({
+
+      // 1) O texto, no formato que o petshop já manda (datas, quantos
+      //    banhos, total, Pix). 2) O PDF logo abaixo.
+      const texto = await enviarMensagemWhatsapp({
         petshopId,
+        tutorId: f.tutor_id,
+        numeroE164: tutor.telefone,
+        tipo: "fechamento",
+        texto: templateFechamento({
+          petshopNome: petshop.nome,
+          tutorNome: tutor.nome,
+          resumo: resumirFechamento(itens),
+          chavePix: petshop.chave_pix,
+        }),
+      });
+      if (!texto.ok) {
+        resultado.falhas.push({ tutorNome: tutor.nome, erro: texto.erro });
+        continue;
+      }
+      const documento = await enviarMensagemWhatsapp({
+        petshopId,
+        tutorId: f.tutor_id,
         numeroE164: tutor.telefone,
         tipo: "fechamento",
         documento: {
           base64: pdf.toString("base64"),
           mimetype: "application/pdf",
           nome: nomeArquivoExtrato(f.competencia, tutor.nome),
-          legenda: templateFechamento({
-            petshopNome: petshop.nome,
-            tutorNome: tutor.nome,
-            competencia: f.competencia,
-            totalCentavos: f.total_centavos,
-            chavePix: petshop.chave_pix,
-          }),
         },
       });
-      if (!envio.ok) {
-        resultado.falhas.push({ tutorNome: tutor.nome, erro: envio.erro });
+      if (!documento.ok) {
+        resultado.falhas.push({ tutorNome: tutor.nome, erro: `Texto enviado, PDF falhou: ${documento.erro}` });
         continue;
       }
       await supabase.from("fechamentos").update({ enviado_em: new Date().toISOString() }).eq("id", f.id);

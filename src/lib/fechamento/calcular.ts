@@ -13,6 +13,12 @@ export function intervaloCompetencia(competencia: string): { inicio: string; fim
   return { inicio: inicio.toUTC().toISO()!, fim: inicio.plus({ months: 1 }).toUTC().toISO()! };
 }
 
+/**
+ * Banho "realizado" = já passou e não foi cancelado nem marcado como falta.
+ * Ninguém precisa lembrar de marcar Concluído pra ele ser cobrado.
+ */
+export const STATUS_REALIZADO = ["agendado", "confirmado", "concluido"] as const;
+
 export type AgendamentoConcluido = {
   id: string;
   inicio: string;
@@ -38,6 +44,8 @@ export type ItemFechamento = {
   cobertoPlano?: boolean;
   agendamentoId?: string;
   assinaturaId?: string;
+  /** Mês da mensalidade (yyyy-MM-dd) — evita cobrar a mesma duas vezes. */
+  competencia?: string;
 };
 
 export type FechamentoTutor = {
@@ -54,6 +62,8 @@ export type FechamentoTutor = {
 export function calcularFechamentos(input: {
   agendamentos: AgendamentoConcluido[];
   assinaturas: AssinaturaAtiva[];
+  /** Mês das mensalidades incluídas. */
+  competencia?: string;
 }): FechamentoTutor[] {
   const porTutor = new Map<string, ItemFechamento[]>();
   const push = (tutorId: string, item: ItemFechamento) => {
@@ -62,13 +72,19 @@ export function calcularFechamentos(input: {
     porTutor.set(tutorId, lista);
   };
 
+  const mesMensalidade = input.competencia
+    ? DateTime.fromISO(input.competencia).setLocale("pt-BR").toFormat("LLLL")
+    : null;
   for (const a of input.assinaturas) {
     push(a.pet.tutor_id, {
       tipo: "mensalidade",
-      descricao: `Mensalidade — ${a.plano.nome}`,
+      descricao: mesMensalidade
+        ? `${a.plano.nome} — mensalidade de ${mesMensalidade}`
+        : `Mensalidade — ${a.plano.nome}`,
       petNome: a.pet.nome,
       valorCentavos: a.plano.preco_centavos,
       assinaturaId: a.id,
+      competencia: input.competencia,
     });
   }
 
