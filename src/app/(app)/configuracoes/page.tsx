@@ -41,7 +41,7 @@ export default async function ConfiguracoesPage() {
     await garantirWebhook(petshop.id);
   }
 
-  const baseUrl = appUrl();
+  const baseUrl = await appUrl();
   const linkPublico = `${baseUrl}/agendar/${petshop.slug}`;
   const qrDataUrl = await QRCode.toDataURL(linkPublico, {
     margin: 1,

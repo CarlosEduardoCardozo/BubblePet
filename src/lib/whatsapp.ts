@@ -2,7 +2,7 @@ import "server-only";
 
 import { randomBytes } from "node:crypto";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { appUrlPublica } from "@/lib/app-url";
+import { urlDaRequisicao } from "@/lib/app-url";
 import {
   configurarWebhook,
   enviarBotoes,
@@ -48,12 +48,14 @@ export async function obterTokenWhatsapp(petshopId: string): Promise<string | nu
 
 /**
  * Garante que a UAZAPI manda as respostas dos clientes (botões Confirmar /
- * Cancelar) pra este app. Só roda na versão publicada: o localhost usa a
- * mesma instância e desviaria as respostas de produção.
+ * Cancelar) pra este app. Só usa o endereço real da requisição em https: o
+ * localhost usa a mesma instância e desviaria as respostas de produção, e um
+ * domínio de reserva pode estar sem DNS — nunca troca um registro bom por
+ * um palpite.
  */
 export async function garantirWebhook(petshopId: string): Promise<void> {
-  const base = appUrlPublica();
-  if (!base) return;
+  const base = await urlDaRequisicao();
+  if (!base || !base.startsWith("https://") || base.includes("localhost")) return;
   const instancia = await obterInstancia(petshopId);
   if (!instancia) return;
 

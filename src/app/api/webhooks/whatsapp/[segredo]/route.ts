@@ -151,7 +151,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ seg
       texto: templateRespostaCancelado(
         pet.nome,
         ag.inicio,
-        petshop?.slug ? `${appUrl()}/agendar/${petshop.slug}` : undefined
+        petshop?.slug ? `${await appUrl()}/agendar/${petshop.slug}` : undefined
       ),
     });
   }
