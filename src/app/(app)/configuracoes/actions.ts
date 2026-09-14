@@ -28,15 +28,49 @@ const petshopFields = z.object({
   endereco: z.string().trim(),
   chave_pix: z.string().trim(),
   dia_fechamento: z.coerce.number().int().min(1).max(31),
-  horario_abertura: z.string().regex(HORA_RE, "Horário de abertura inválido"),
-  horario_fechamento: z.string().regex(HORA_RE, "Horário de fechamento inválido"),
-  dias: z.array(z.coerce.number().int().min(1).max(7)).min(1, "Marque ao menos um dia"),
   capacidade_por_horario: z.coerce
     .number()
     .int()
     .min(1, "Pelo menos 1 atendimento por horário")
     .max(20, "No máximo 20 atendimentos por horário"),
 });
+
+const NOME_DIA = ["", "segunda", "terça", "quarta", "quinta", "sexta", "sábado", "domingo"];
+
+const horarioDia = z.object({
+  abertura: z.string().regex(HORA_RE, "Horário inválido"),
+  fechamento: z.string().regex(HORA_RE, "Horário inválido"),
+  pausaInicio: z.string().regex(HORA_RE, "Horário inválido").optional(),
+  pausaFim: z.string().regex(HORA_RE, "Horário inválido").optional(),
+});
+
+/** Valida o horário semanal vindo do formulário (JSON). */
+function lerHorarioSemanaForm(
+  raw: FormDataEntryValue | null
+): { ok: true; semana: Record<string, z.infer<typeof horarioDia>> } | { ok: false; erro: string } {
+  let valor: unknown;
+  try {
+    valor = JSON.parse(String(raw ?? "{}"));
+  } catch {
+    return { ok: false, erro: "Horário de funcionamento inválido." };
+  }
+  const parsed = z.record(z.string().regex(/^[1-7]$/), horarioDia).safeParse(valor);
+  if (!parsed.success) return { ok: false, erro: "Confira os horários: use o formato 08:00." };
+  const semana = parsed.data;
+  if (Object.keys(semana).length === 0) return { ok: false, erro: "Deixe ao menos um dia aberto." };
+  for (const [dia, h] of Object.entries(semana)) {
+    const nome = NOME_DIA[Number(dia)];
+    if (h.abertura >= h.fechamento) return { ok: false, erro: `Na ${nome}, a abertura precisa ser antes do fechamento.` };
+    if (!!h.pausaInicio !== !!h.pausaFim) return { ok: false, erro: `Na ${nome}, informe início e fim do intervalo.` };
+    if (h.pausaInicio && h.pausaFim) {
+      if (h.pausaInicio >= h.pausaFim) return { ok: false, erro: `Na ${nome}, o intervalo termina antes de começar.` };
+      if (h.pausaInicio <= h.abertura || h.pausaFim >= h.fechamento) {
+        return { ok: false, erro: `Na ${nome}, o intervalo precisa ficar dentro do expediente.` };
+      }
+    }
+  }
+  return { ok: true, semana };
+}
 
 export async function updatePetshop(formData: FormData): Promise<ActionResult> {
   const parsed = petshopFields.safeParse({
@@ -45,9 +79,6 @@ export async function updatePetshop(formData: FormData): Promise<ActionResult> {
     endereco: formData.get("endereco") ?? "",
     chave_pix: formData.get("chave_pix") ?? "",
     dia_fechamento: formData.get("dia_fechamento"),
-    horario_abertura: formData.get("horario_abertura"),
-    horario_fechamento: formData.get("horario_fechamento"),
-    dias: formData.getAll("dias"),
     capacidade_por_horario: formData.get("capacidade_por_horario") ?? 1,
   });
   if (!parsed.success) {
@@ -60,9 +91,11 @@ export async function updatePetshop(formData: FormData): Promise<ActionResult> {
     if (!telefone) return { error: "Telefone inválido. Use DDD + número." };
   }
 
-  if (parsed.data.horario_abertura >= parsed.data.horario_fechamento) {
-    return { error: "A abertura precisa ser antes do fechamento." };
-  }
+  const horario = lerHorarioSemanaForm(formData.get("horario_semana"));
+  if (!horario.ok) return { error: horario.erro };
+  const dias = Object.keys(horario.semana).map(Number).sort();
+  const aberturas = Object.values(horario.semana).map((h) => h.abertura).sort();
+  const fechamentos = Object.values(horario.semana).map((h) => h.fechamento).sort();
 
   const supabase = await createClient();
   const petshopId = await getCurrentPetshopId(supabase);
@@ -75,9 +108,11 @@ export async function updatePetshop(formData: FormData): Promise<ActionResult> {
       endereco: parsed.data.endereco || null,
       chave_pix: parsed.data.chave_pix || null,
       dia_fechamento: parsed.data.dia_fechamento,
-      horario_abertura: parsed.data.horario_abertura,
-      horario_fechamento: parsed.data.horario_fechamento,
-      dias_funcionamento: Array.from(new Set(parsed.data.dias)).sort(),
+      horario_semana: horario.semana,
+      // Resumo: limites da grade da agenda e dias abertos.
+      horario_abertura: aberturas[0],
+      horario_fechamento: fechamentos.at(-1),
+      dias_funcionamento: dias,
       capacidade_por_horario: parsed.data.capacidade_por_horario,
     })
     .eq("id", petshopId);

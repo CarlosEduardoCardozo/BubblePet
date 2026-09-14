@@ -5,13 +5,26 @@ export const ZONE = "America/Sao_Paulo";
 
 export type Ocupado = { id?: string; inicio: string; fim: string };
 
-export type HorarioFuncionamento = {
-  /** "08:00" */
+/** Expediente de um dia: "08:00"–"18:00", com pausa opcional (almoço). */
+export type HorarioDia = {
   abertura: string;
-  /** "18:00" */
   fechamento: string;
-  /** 1=segunda ... 7=domingo (ISO/luxon) */
+  pausaInicio?: string | null;
+  pausaFim?: string | null;
+};
+
+/** Chave = dia ISO (1=segunda ... 7=domingo); dia ausente = fechado. */
+export type HorarioSemana = Partial<Record<number, HorarioDia>>;
+
+export type HorarioFuncionamento = {
+  /** Menor abertura da semana, "08:00" (limites da grade da agenda). */
+  abertura: string;
+  /** Maior fechamento da semana, "18:00". */
+  fechamento: string;
+  /** Dias abertos, 1=segunda ... 7=domingo (ISO/luxon). */
   dias: number[];
+  /** Horário de cada dia; sem ele, todo dia aberto usa abertura/fechamento. */
+  semana?: HorarioSemana;
   /** Quantos atendimentos cabem ao mesmo tempo (padrão 1). */
   capacidade?: number;
 };
@@ -27,10 +40,71 @@ function hm(valor: string): { hour: number; minute: number } {
   return { hour: h ?? 0, minute: m ?? 0 };
 }
 
+const HORA_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
+
+/** Lê o jsonb do banco; ignora dia malformado em vez de quebrar a agenda. */
+export function lerHorarioSemana(raw: unknown): HorarioSemana | null {
+  if (!raw || typeof raw !== "object") return null;
+  const semana: HorarioSemana = {};
+  for (const [chave, valor] of Object.entries(raw as Record<string, unknown>)) {
+    const dia = Number(chave);
+    if (!Number.isInteger(dia) || dia < 1 || dia > 7 || !valor || typeof valor !== "object") continue;
+    const v = valor as Record<string, unknown>;
+    if (typeof v.abertura !== "string" || typeof v.fechamento !== "string") continue;
+    if (!HORA_RE.test(v.abertura) || !HORA_RE.test(v.fechamento) || v.abertura >= v.fechamento) continue;
+    const temPausa =
+      typeof v.pausaInicio === "string" &&
+      typeof v.pausaFim === "string" &&
+      HORA_RE.test(v.pausaInicio) &&
+      HORA_RE.test(v.pausaFim) &&
+      v.pausaInicio < v.pausaFim;
+    semana[dia] = {
+      abertura: v.abertura,
+      fechamento: v.fechamento,
+      ...(temPausa ? { pausaInicio: v.pausaInicio as string, pausaFim: v.pausaFim as string } : {}),
+    };
+  }
+  return semana;
+}
+
+/** Monta o horário a partir da linha de petshops (mesma regra em todo lugar). */
+export function horarioDoPetshop(row: {
+  horario_abertura?: string | null;
+  horario_fechamento?: string | null;
+  dias_funcionamento?: number[] | null;
+  horario_semana?: unknown;
+  capacidade_por_horario?: number | null;
+} | null): HorarioFuncionamento {
+  if (!row) return HORARIO_PADRAO;
+  const abertura = row.horario_abertura ? String(row.horario_abertura).slice(0, 5) : HORARIO_PADRAO.abertura;
+  const fechamento = row.horario_fechamento ? String(row.horario_fechamento).slice(0, 5) : HORARIO_PADRAO.fechamento;
+  const semana = lerHorarioSemana(row.horario_semana);
+  if (semana) {
+    const dias = Object.keys(semana).map(Number).sort();
+    const abre = dias.map((d) => semana[d]!.abertura).sort()[0] ?? abertura;
+    const fecha = dias.map((d) => semana[d]!.fechamento).sort().at(-1) ?? fechamento;
+    return { abertura: abre, fechamento: fecha, dias, semana, capacidade: row.capacidade_por_horario ?? 1 };
+  }
+  return {
+    abertura,
+    fechamento,
+    dias: row.dias_funcionamento ?? HORARIO_PADRAO.dias,
+    capacidade: row.capacidade_por_horario ?? 1,
+  };
+}
+
+/** Expediente do dia da semana (1..7), ou null se fecha. */
+export function horarioDoDia(horario: HorarioFuncionamento, weekday: number): HorarioDia | null {
+  if (horario.semana) return horario.semana[weekday] ?? null;
+  return horario.dias.includes(weekday)
+    ? { abertura: horario.abertura, fechamento: horario.fechamento }
+    : null;
+}
+
 export function diaAberto(dataISO: string, horario: HorarioFuncionamento): boolean {
   const dia = DateTime.fromISO(dataISO, { zone: ZONE });
   if (!dia.isValid) return false;
-  if (!horario.dias.includes(dia.weekday)) return false;
+  if (!horarioDoDia(horario, dia.weekday)) return false;
   if (nomeFeriado(dia.toFormat("yyyy-LL-dd"))) return false;
   return true;
 }
@@ -66,9 +140,9 @@ export function horarioCabe(
 }
 
 /**
- * Horários de início livres num dia, em passos de `stepMin`, que cabem antes
- * do fechamento, respeitam a capacidade do horário e respeitam a antecedência
- * mínima em relação a `agora`. Puro: mesma função pro painel da agenda e pro
+ * Horários de início livres num dia, em passos de `stepMin`, que cabem no
+ * expediente daquele dia (sem atravessar a pausa), respeitam a capacidade do
+ * horário e a antecedência mínima em relação a `agora`. Puro: mesma função pro painel da agenda e pro
  * link público.
  */
 export function calcularHorariosLivres(opts: {
@@ -88,8 +162,13 @@ export function calcularHorariosLivres(opts: {
   if (!diaAberto(dataISO, horario)) return [];
 
   const dia = DateTime.fromISO(dataISO, { zone: ZONE }).startOf("day");
-  const abertura = dia.set(hm(horario.abertura));
-  const fechamento = dia.set(hm(horario.fechamento));
+  const expediente = horarioDoDia(horario, dia.weekday)!;
+  const abertura = dia.set(hm(expediente.abertura));
+  const fechamento = dia.set(hm(expediente.fechamento));
+  const pausa =
+    expediente.pausaInicio && expediente.pausaFim
+      ? { inicio: dia.set(hm(expediente.pausaInicio)), fim: dia.set(hm(expediente.pausaFim)) }
+      : null;
   const minimo = agora.plus({ minutes: antecedenciaMin });
   const capacidade = Math.max(1, horario.capacidade ?? 1);
 
@@ -106,6 +185,8 @@ export function calcularHorariosLivres(opts: {
   ) {
     if (inicio < minimo) continue;
     const fim = inicio.plus({ minutes: duracaoMin });
+    // Atendimento não atravessa o almoço.
+    if (pausa && inicio < pausa.fim && fim > pausa.inicio) continue;
     if (cabe(inicio, fim, intervalos, capacidade)) livres.push(inicio);
   }
   return livres;

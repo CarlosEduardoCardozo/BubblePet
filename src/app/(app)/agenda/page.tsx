@@ -1,6 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { AgendaView } from "@/components/agenda/AgendaView";
-import { HORARIO_PADRAO, type HorarioFuncionamento } from "@/lib/agenda/slots";
+import { horarioDoPetshop } from "@/lib/agenda/slots";
 
 export default async function AgendaPage() {
   const supabase = await createClient();
@@ -20,18 +20,11 @@ export default async function AgendaPage() {
       .order("nome"),
     supabase
       .from("petshops")
-      .select("horario_abertura, horario_fechamento, dias_funcionamento, capacidade_por_horario, whatsapp_status")
+      .select("horario_abertura, horario_fechamento, dias_funcionamento, horario_semana, capacidade_por_horario, whatsapp_status")
       .single(),
   ]);
 
-  const horario: HorarioFuncionamento = petshop
-    ? {
-        abertura: String(petshop.horario_abertura).slice(0, 5),
-        fechamento: String(petshop.horario_fechamento).slice(0, 5),
-        dias: petshop.dias_funcionamento ?? HORARIO_PADRAO.dias,
-        capacidade: petshop.capacidade_por_horario ?? 1,
-      }
-    : HORARIO_PADRAO;
+  const horario = horarioDoPetshop(petshop);
 
   return (
     <AgendaView

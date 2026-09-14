@@ -28,7 +28,7 @@ import { HorariosDisponiveis } from "./HorariosDisponiveis";
 import { AgendaFilters, EMPTY_FILTERS, type AgendaFiltersState } from "./AgendaFilters";
 import { AgendaToolbar, type AgendaViewType } from "./AgendaToolbar";
 import { nomeFeriado } from "@/lib/feriados-br";
-import { ZONE, type HorarioFuncionamento } from "@/lib/agenda/slots";
+import { horarioDoDia, ZONE, type HorarioFuncionamento } from "@/lib/agenda/slots";
 import { moverAgendamento } from "@/app/(app)/agenda/actions";
 import { STATUS_COLORS, STATUS_LABELS, type AgendamentoStatus } from "@/lib/agendamento";
 import { lerAdicionais, type Adicional } from "@/lib/adicionais";
@@ -81,8 +81,9 @@ function hm(valor: string): { hour: number; minute: number } {
 function proximoSlotPadrao(referencia: Date, horario: HorarioFuncionamento): Date {
   const agora = DateTime.now().setZone(ZONE);
   const dia = DateTime.fromJSDate(referencia).setZone(ZONE).startOf("day");
-  const abertura = hm(horario.abertura);
-  const fechamento = hm(horario.fechamento);
+  const expediente = horarioDoDia(horario, dia.weekday) ?? horario;
+  const abertura = hm(expediente.abertura);
+  const fechamento = hm(expediente.fechamento);
 
   if (dia.hasSame(agora, "day")) {
     const minuto = agora.minute < 30 ? 30 : 0;
@@ -327,11 +328,19 @@ export function AgendaView({
     ? Math.min(...servicos.map((s) => s.duracao_min))
     : 30;
 
-  const businessHours = {
-    daysOfWeek: horario.dias.map((d) => d % 7), // luxon 7=domingo → FullCalendar 0
-    startTime: horario.abertura,
-    endTime: horario.fechamento,
-  };
+  // Um bloco por dia (e dois quando tem pausa): o que fica fora aparece
+  // hachurado na grade. luxon 7=domingo → FullCalendar 0.
+  const businessHours = horario.dias.flatMap((d) => {
+    const exp = horarioDoDia(horario, d);
+    if (!exp) return [];
+    const dia = [d % 7];
+    return exp.pausaInicio && exp.pausaFim
+      ? [
+          { daysOfWeek: dia, startTime: exp.abertura, endTime: exp.pausaInicio },
+          { daysOfWeek: dia, startTime: exp.pausaFim, endTime: exp.fechamento },
+        ]
+      : [{ daysOfWeek: dia, startTime: exp.abertura, endTime: exp.fechamento }];
+  });
 
   const agora = DateTime.now().setZone(ZONE);
   const scrollTime = agora.hour >= hm(horario.abertura).hour

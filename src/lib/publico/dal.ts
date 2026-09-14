@@ -5,7 +5,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { precoParaPorte, type PrecosServico } from "@/lib/servico-preco";
 import {
   calcularHorariosLivres,
-  HORARIO_PADRAO,
+  horarioDoPetshop,
   ZONE,
   type HorarioFuncionamento,
   type Ocupado,
@@ -38,7 +38,7 @@ export async function petshopPorSlug(slug: string): Promise<PetshopPublico | nul
   const { data } = await admin
     .from("petshops")
     .select(
-      "id, nome, slug, telefone, whatsapp_numero, endereco, whatsapp_status, horario_abertura, horario_fechamento, dias_funcionamento, capacidade_por_horario"
+      "id, nome, slug, telefone, whatsapp_numero, endereco, whatsapp_status, horario_abertura, horario_fechamento, dias_funcionamento, horario_semana, capacidade_por_horario"
     )
     .eq("slug", slug)
     // Conta congelada: o link público sai do ar junto.
@@ -54,12 +54,7 @@ export async function petshopPorSlug(slug: string): Promise<PetshopPublico | nul
     telefone: data.whatsapp_numero ?? data.telefone,
     endereco: data.endereco,
     whatsappConectado: data.whatsapp_status === "conectado",
-    horario: {
-      abertura: String(data.horario_abertura).slice(0, 5),
-      fechamento: String(data.horario_fechamento).slice(0, 5),
-      dias: data.dias_funcionamento ?? HORARIO_PADRAO.dias,
-      capacidade: data.capacidade_por_horario ?? 1,
-    },
+    horario: horarioDoPetshop(data),
   };
 }
 

@@ -1,6 +1,7 @@
 import QRCode from "qrcode";
 import Link from "next/link";
 import { appUrl } from "@/lib/app-url";
+import { horarioDoDia, horarioDoPetshop } from "@/lib/agenda/slots";
 import { garantirWebhook } from "@/lib/whatsapp";
 import { createClient } from "@/lib/supabase/server";
 import { PageHeader } from "@/components/shared/PageHeader";
@@ -20,7 +21,7 @@ export default async function ConfiguracoesPage({
     supabase
       .from("petshops")
       .select(
-        "id, nome, telefone, endereco, chave_pix, dia_fechamento, slug, horario_abertura, horario_fechamento, dias_funcionamento, capacidade_por_horario, whatsapp_status, whatsapp_numero, whatsapp_profile_nome"
+        "id, nome, telefone, endereco, chave_pix, dia_fechamento, slug, horario_abertura, horario_fechamento, dias_funcionamento, horario_semana, capacidade_por_horario, whatsapp_status, whatsapp_numero, whatsapp_profile_nome"
       )
       .single(),
     supabase
@@ -85,9 +86,16 @@ export default async function ConfiguracoesPage({
               endereco: petshop.endereco,
               chave_pix: petshop.chave_pix,
               dia_fechamento: petshop.dia_fechamento,
-              horario_abertura: String(petshop.horario_abertura).slice(0, 5),
-              horario_fechamento: String(petshop.horario_fechamento).slice(0, 5),
-              dias_funcionamento: petshop.dias_funcionamento ?? [1, 2, 3, 4, 5, 6],
+              horario_semana: (() => {
+                // Sem horário por dia salvo ainda: parte do horário único antigo.
+                const h = horarioDoPetshop(petshop);
+                return Object.fromEntries(
+                  [1, 2, 3, 4, 5, 6, 7].flatMap((d) => {
+                    const exp = horarioDoDia(h, d);
+                    return exp ? [[d, exp]] : [];
+                  })
+                );
+              })(),
               capacidade_por_horario: petshop.capacidade_por_horario ?? 1,
             }}
           />

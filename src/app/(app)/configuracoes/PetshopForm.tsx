@@ -7,19 +7,11 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { cn } from "@/lib/utils";
 import { formatPhoneBR } from "@/lib/phone";
+import type { HorarioSemana } from "@/lib/agenda/slots";
 import { updatePetshop } from "./actions";
+import { HorarioSemanaEditor, linhasDaSemana, semanaDasLinhas } from "./HorarioSemanaEditor";
 
-const DIAS = [
-  { valor: 1, label: "Seg" },
-  { valor: 2, label: "Ter" },
-  { valor: 3, label: "Qua" },
-  { valor: 4, label: "Qui" },
-  { valor: 5, label: "Sex" },
-  { valor: 6, label: "Sáb" },
-  { valor: 7, label: "Dom" },
-];
 
 export type PetshopFormData = {
   nome: string;
@@ -27,28 +19,19 @@ export type PetshopFormData = {
   endereco: string | null;
   chave_pix: string | null;
   dia_fechamento: number;
-  horario_abertura: string;
-  horario_fechamento: string;
-  dias_funcionamento: number[];
+  horario_semana: HorarioSemana;
   capacidade_por_horario: number;
 };
 
 export function PetshopForm({ petshop }: { petshop: PetshopFormData }) {
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
-  const [dias, setDias] = useState<number[]>(petshop.dias_funcionamento);
-
-  function toggleDia(valor: number) {
-    setDias((atual) =>
-      atual.includes(valor) ? atual.filter((d) => d !== valor) : [...atual, valor].sort()
-    );
-  }
+  const [linhas, setLinhas] = useState(() => linhasDaSemana(petshop.horario_semana));
 
   function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const formData = new FormData(event.currentTarget);
-    formData.delete("dias");
-    dias.forEach((d) => formData.append("dias", String(d)));
+    formData.set("horario_semana", JSON.stringify(semanaDasLinhas(linhas)));
     setError(null);
 
     startTransition(async () => {
@@ -120,29 +103,13 @@ export function PetshopForm({ petshop }: { petshop: PetshopFormData }) {
 
           <div className="flex flex-col gap-3 rounded-[12px] border border-border bg-muted/30 p-4">
             <span className="text-sm font-medium">Funcionamento</span>
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="horario_abertura">Abre às</Label>
-                <Input
-                  id="horario_abertura"
-                  name="horario_abertura"
-                  type="time"
-                  step={1800}
-                  defaultValue={petshop.horario_abertura}
-                  required
-                />
-              </div>
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="horario_fechamento">Fecha às</Label>
-                <Input
-                  id="horario_fechamento"
-                  name="horario_fechamento"
-                  type="time"
-                  step={1800}
-                  defaultValue={petshop.horario_fechamento}
-                  required
-                />
-              </div>
+            <HorarioSemanaEditor linhas={linhas} onChange={setLinhas} />
+            <p className="-mt-1 text-xs text-muted-foreground">
+              A agenda e o link de agendamento só oferecem horários dentro do expediente de cada
+              dia, sem atravessar o intervalo. Feriados nacionais fecham sozinhos.
+            </p>
+
+            <div className="grid gap-4 sm:grid-cols-2">
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="capacidade_por_horario">Banhos ao mesmo tempo</Label>
                 <Input
@@ -169,31 +136,6 @@ export function PetshopForm({ petshop }: { petshop: PetshopFormData }) {
                   defaultValue={petshop.dia_fechamento}
                   required
                 />
-              </div>
-            </div>
-
-            <div className="flex flex-col gap-1.5">
-              <Label>Dias de atendimento</Label>
-              <div className="flex flex-wrap gap-1.5">
-                {DIAS.map((dia) => {
-                  const ativo = dias.includes(dia.valor);
-                  return (
-                    <button
-                      key={dia.valor}
-                      type="button"
-                      onClick={() => toggleDia(dia.valor)}
-                      aria-pressed={ativo}
-                      className={cn(
-                        "h-8 rounded-[8px] border px-3 text-sm font-medium transition-colors",
-                        ativo
-                          ? "border-primary bg-primary text-primary-foreground"
-                          : "border-input bg-white text-muted-foreground hover:bg-muted"
-                      )}
-                    >
-                      {dia.label}
-                    </button>
-                  );
-                })}
               </div>
             </div>
           </div>
