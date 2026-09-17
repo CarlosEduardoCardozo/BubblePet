@@ -153,7 +153,7 @@ export async function updateSlug(slugRaw: string): Promise<ActionResult> {
 // ---------------------------------------------------------------------------
 
 export type EstadoConexao =
-  | { status: "conectando"; qrcode: string | null }
+  | { status: "conectando"; qrcode: string | null; paircode?: string | null }
   | { status: "conectado"; numero: string | null; profileNome: string | null }
   | { status: "desconectado" }
   | { error: string };
@@ -172,10 +172,18 @@ function descreverErroUazapi(error: unknown): string {
   return "Não foi possível falar com o WhatsApp agora.";
 }
 
-export async function conectarWhatsapp(): Promise<EstadoConexao> {
+export async function conectarWhatsapp(opcoes?: { telefone?: string }): Promise<EstadoConexao> {
   const supabase = await createClient();
   const petshopId = await getCurrentPetshopId(supabase);
   const admin = createAdminClient();
+
+  // Conexão por código: o número do WhatsApp que vai ser conectado.
+  let telefoneDigitos: string | undefined;
+  if (opcoes?.telefone !== undefined) {
+    const e164 = normalizePhoneBR(opcoes.telefone);
+    if (!e164) return { error: "Número inválido. Use DDD + número do WhatsApp do petshop." };
+    telefoneDigitos = e164.replace(/\D/g, "");
+  }
 
   try {
     let token = await obterTokenWhatsapp(petshopId);
@@ -196,7 +204,7 @@ export async function conectarWhatsapp(): Promise<EstadoConexao> {
       token = criada.token;
     }
 
-    const resultado = await conectar(token);
+    const resultado = await conectar(token, telefoneDigitos);
 
     if (resultado.loggedIn) {
       return await sincronizarStatus(petshopId, token);
@@ -207,7 +215,10 @@ export async function conectarWhatsapp(): Promise<EstadoConexao> {
       .update({ whatsapp_status: "conectando" })
       .eq("id", petshopId);
     revalidatePath("/configuracoes");
-    return { status: "conectando", qrcode: resultado.qrcode };
+    if (telefoneDigitos && !resultado.paircode) {
+      return { error: "O WhatsApp não gerou o código agora. Tente de novo em alguns segundos." };
+    }
+    return { status: "conectando", qrcode: resultado.qrcode, paircode: resultado.paircode };
   } catch (error) {
     return { error: descreverErroUazapi(error) };
   }

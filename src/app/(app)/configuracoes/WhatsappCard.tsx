@@ -4,10 +4,12 @@ import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { DateTime } from "luxon";
 import { toast } from "sonner";
-import { MessageCircle, RefreshCw, Send, Unplug } from "lucide-react";
+import { Hash, MessageCircle, QrCode, RefreshCw, Send, Unplug } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { formatPhoneBR } from "@/lib/phone";
 import { cn } from "@/lib/utils";
@@ -39,11 +41,20 @@ const TIPO_LABEL: Record<string, string> = {
 
 const POLL_MS = 3000;
 const POLL_MAX = 40; // ~2 min: depois disso o QR já expirou
+const POLL_MAX_CODIGO = 100; // ~5 min: validade do código de pareamento
 
 type Fase =
   | { tipo: "idle" }
+  | { tipo: "pedirNumero" }
   | { tipo: "qr"; qrcode: string | null; polls: number }
-  | { tipo: "expirado" };
+  | { tipo: "codigo"; paircode: string; polls: number }
+  | { tipo: "expirado"; porCodigo: boolean };
+
+/** "ABCD1234" -> "ABCD-1234", como o WhatsApp mostra. */
+function formatarCodigo(codigo: string): string {
+  const limpo = codigo.replace(/[^0-9A-Za-z]/g, "").toUpperCase();
+  return limpo.length === 8 ? `${limpo.slice(0, 4)}-${limpo.slice(4)}` : codigo.toUpperCase();
+}
 
 export function WhatsappCard({
   status,
@@ -63,6 +74,7 @@ export function WhatsappCard({
   const [erro, setErro] = useState<string | null>(null);
   const [confirmDesconectar, setConfirmDesconectar] = useState(false);
   const [isPending, startTransition] = useTransition();
+  const [telefone, setTelefone] = useState(telefonePetshop ? formatPhoneBR(telefonePetshop) : "");
 
   const conectado = status === "conectado";
 
@@ -84,9 +96,19 @@ export function WhatsappCard({
     }
     if (estado.status === "conectando") {
       setFase((atual) => {
+        // Código de pareamento: mantém o código na tela até conectar ou vencer.
+        if (estado.paircode || atual.tipo === "codigo") {
+          const polls = atual.tipo === "codigo" && !estado.paircode ? atual.polls + 1 : 0;
+          if (polls >= POLL_MAX_CODIGO) return { tipo: "expirado", porCodigo: true };
+          return {
+            tipo: "codigo",
+            paircode: estado.paircode ?? (atual.tipo === "codigo" ? atual.paircode : ""),
+            polls,
+          };
+        }
         const polls = atual.tipo === "qr" ? atual.polls + 1 : 0;
         // ~2 min sem leitura: o QR já expirou do lado do WhatsApp.
-        if (polls >= POLL_MAX) return { tipo: "expirado" };
+        if (polls >= POLL_MAX) return { tipo: "expirado", porCodigo: false };
         return {
           tipo: "qr",
           qrcode: estado.qrcode ?? (atual.tipo === "qr" ? atual.qrcode : null),
@@ -105,10 +127,24 @@ export function WhatsappCard({
     });
   }
 
-  // Enquanto o QR está na tela, pergunta pra UAZAPI a cada 3s se o celular já
-  // leu. Para sozinho ao conectar, ao dar erro ou quando o QR expira.
+  function conectarPorCodigo(event: React.FormEvent) {
+    event.preventDefault();
+    setErro(null);
+    startTransition(async () => {
+      const estado = await conectarWhatsapp({ telefone });
+      if ("error" in estado) {
+        // Erro de número: continua no formulário pra corrigir.
+        setErro(estado.error);
+        return;
+      }
+      aplicarEstado(estado);
+    });
+  }
+
+  // Enquanto o QR ou o código está na tela, pergunta pra UAZAPI a cada 3s se
+  // o celular já conectou. Para sozinho ao conectar, ao dar erro ou ao vencer.
   useEffect(() => {
-    if (fase.tipo !== "qr") return;
+    if (fase.tipo !== "qr" && fase.tipo !== "codigo") return;
     const timer = setTimeout(async () => {
       aplicarEstado(await verificarWhatsapp());
     }, POLL_MS);
@@ -228,21 +264,83 @@ export function WhatsappCard({
               Aguardando leitura...
             </p>
           </div>
+        ) : fase.tipo === "codigo" ? (
+          <div className="flex flex-col items-center gap-3 text-center">
+            <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+              Código de conexão
+            </span>
+            <span className="select-all rounded-[12px] border border-border bg-muted/30 px-5 py-3 font-mono text-3xl font-semibold tracking-[0.2em]">
+              {formatarCodigo(fase.paircode)}
+            </span>
+            <ol className="text-left text-xs text-muted-foreground">
+              <li>1. Abra o WhatsApp no celular do petshop</li>
+              <li>2. Toque em ⋮ (ou Configurações) › <strong>Aparelhos conectados</strong></li>
+              <li>3. <strong>Conectar aparelho</strong></li>
+              <li>4. Toque em <strong>Conectar com número de telefone</strong> e digite o código</li>
+            </ol>
+            <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <RefreshCw size={12} className="animate-spin" />
+              Aguardando o código ser digitado... (vale 5 minutos)
+            </p>
+            <Button type="button" variant="ghost" size="sm" onClick={() => setFase({ tipo: "idle" })}>
+              Voltar
+            </Button>
+          </div>
+        ) : fase.tipo === "pedirNumero" ? (
+          <form onSubmit={conectarPorCodigo} className="flex flex-col gap-3">
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="wpp-numero">Número do WhatsApp que vai ser conectado</Label>
+              <Input
+                id="wpp-numero"
+                value={telefone}
+                onChange={(e) => setTelefone(e.target.value)}
+                inputMode="tel"
+                placeholder="(47) 99999-9999"
+                autoFocus
+              />
+              <span className="text-xs text-muted-foreground">
+                O WhatsApp gera um código de 8 letras/números pra digitar nesse celular.
+              </span>
+            </div>
+            <div className="flex gap-2">
+              <Button type="button" variant="outline" onClick={() => setFase({ tipo: "idle" })} disabled={isPending}>
+                Voltar
+              </Button>
+              <Button type="submit" className="flex-1" disabled={isPending || !telefone.trim()}>
+                {isPending ? "Gerando código..." : "Gerar código"}
+              </Button>
+            </div>
+          </form>
         ) : (
           <div className="flex flex-col gap-3">
             {fase.tipo === "expirado" && (
               <p className="text-sm text-muted-foreground">
-                O QR code expirou. Gere um novo para tentar de novo.
+                {fase.porCodigo
+                  ? "O código venceu. Gere outro para tentar de novo."
+                  : "O QR code expirou. Gere um novo para tentar de novo."}
               </p>
             )}
-            <Button type="button" onClick={conectar} disabled={isPending}>
-              <MessageCircle size={16} />
-              {isPending
-                ? "Gerando QR code..."
-                : fase.tipo === "expirado"
-                  ? "Gerar novo QR code"
-                  : "Conectar WhatsApp"}
-            </Button>
+            <div className="grid gap-2 sm:grid-cols-2">
+              <Button type="button" onClick={conectar} disabled={isPending}>
+                <QrCode size={16} />
+                {isPending ? "Gerando QR code..." : "Conectar com QR code"}
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  setErro(null);
+                  setFase({ tipo: "pedirNumero" });
+                }}
+                disabled={isPending}
+              >
+                <Hash size={16} />
+                Conectar com código
+              </Button>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              A câmera não leu o QR? Use o código: é só digitar no celular.
+            </p>
           </div>
         )}
 

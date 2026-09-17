@@ -78,20 +78,30 @@ export async function criarInstancia(
   return { token: data.token, instanceId: data.instance?.id ?? null };
 }
 
-export async function conectar(token: string): Promise<{
+/**
+ * Sem `telefone`, gera QR code (expira em ~2 min). Com `telefone` (só
+ * dígitos, 55DDDNÚMERO), gera o código de pareamento que se digita no
+ * celular — vale ~5 min e funciona quando a câmera não lê o QR.
+ */
+export async function conectar(
+  token: string,
+  telefone?: string
+): Promise<{
   connected: boolean;
   loggedIn: boolean;
   qrcode: string | null;
+  paircode: string | null;
 }> {
   const data = await request<{
     connected?: boolean;
     loggedIn?: boolean;
     instance?: InstanciaBruta;
-  }>("/instance/connect", { token, body: {} });
+  }>("/instance/connect", { token, body: telefone ? { phone: telefone } : {} });
   return {
     connected: !!data.connected,
     loggedIn: !!data.loggedIn,
     qrcode: data.instance?.qrcode ?? null,
+    paircode: data.instance?.paircode ?? null,
   };
 }
 
