@@ -1,4 +1,5 @@
 import { DateTime } from "luxon";
+import { semPermissao } from "@/lib/acesso";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentPetshopId } from "@/lib/supabase/petshop";
 import { dadosRelatorio } from "@/lib/fechamento/relatorio";
@@ -21,6 +22,7 @@ export async function GET(
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return new Response("Não autorizado", { status: 401 });
+  if (await semPermissao("financeiro")) return new Response("Sem acesso ao financeiro", { status: 403 });
 
   const petshopId = await getCurrentPetshopId(supabase);
   const { data: petshop } = await supabase.from("petshops").select("nome").eq("id", petshopId).single();

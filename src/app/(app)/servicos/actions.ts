@@ -1,5 +1,6 @@
 "use server";
 
+import { semPermissao } from "@/lib/acesso";
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
@@ -78,6 +79,8 @@ function readServicoForm(formData: FormData): ServicoFormResult {
 }
 
 export async function createServico(formData: FormData): Promise<ActionResult> {
+  const bloqueio = await semPermissao("servicos");
+  if (bloqueio) return bloqueio;
   const parsed = readServicoForm(formData);
   if ("error" in parsed) return { error: parsed.error };
 
@@ -97,6 +100,8 @@ export async function updateServico(
   id: string,
   formData: FormData
 ): Promise<ActionResult> {
+  const bloqueio = await semPermissao("servicos");
+  if (bloqueio) return bloqueio;
   const parsed = readServicoForm(formData);
   if ("error" in parsed) return { error: parsed.error };
 
@@ -109,6 +114,8 @@ export async function updateServico(
 }
 
 export async function deleteServico(id: string): Promise<ActionResult> {
+  const bloqueio = await semPermissao("servicos");
+  if (bloqueio) return bloqueio;
   const supabase = await createClient();
   const { error } = await supabase
     .from("servicos")

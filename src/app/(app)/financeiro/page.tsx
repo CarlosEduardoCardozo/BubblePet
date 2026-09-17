@@ -73,6 +73,16 @@ export default async function FinanceiroPage({
     rascunhoIds: (rascunhos ?? []).map((r) => r.id),
   });
 
+  // Cliente com algo novo desde o extrato (inclusive banho do plano, R$ 0).
+  const comNovidade = new Set(
+    pendencias.filter((p) => p.agendamentoIds.length > 0 || p.totalCentavos > 0).map((p) => p.tutorId)
+  );
+  const rascunhoDoTutor = new Set((rascunhos ?? []).map((r) => r.tutor_id));
+  const abertosPorTutor = new Map<string, number>();
+  for (const r of rows ?? []) {
+    if (r.status === "aberto") abertosPorTutor.set(r.tutor_id, (abertosPorTutor.get(r.tutor_id) ?? 0) + 1);
+  }
+
   const fechamentos: FechamentoRow[] = (rows ?? []).map((r) => {
     const tutor = um(r.tutores as Um<{ nome: string; telefone: string }>);
     const itens = (r.itens as { tipo: string }[]) ?? [];
@@ -89,6 +99,9 @@ export default async function FinanceiroPage({
       pagoEm: r.pago_em,
       periodoInicio: r.periodo_inicio,
       periodoFim: r.periodo_fim,
+      extratosAbertosDoCliente: abertosPorTutor.get(r.tutor_id) ?? 0,
+      novidadesDepoisDoEnvio:
+        r.status === "aberto" && !!r.enviado_em && comNovidade.has(r.tutor_id) && !rascunhoDoTutor.has(r.tutor_id),
     };
   });
 

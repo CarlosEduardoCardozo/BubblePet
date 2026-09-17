@@ -1,9 +1,14 @@
 import { redirect } from "next/navigation";
+import { after } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { Topbar } from "@/components/layout/Topbar";
+import { SuporteBanner } from "@/components/layout/SuporteBanner";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { ehAdmin } from "@/lib/admin";
+import { lerModulos, TODOS_MODULOS } from "@/lib/permissoes";
+import { lerSuporte } from "@/lib/suporte";
+import { registrarUso } from "@/lib/uso";
 
 export default async function AppLayout({
   children,
@@ -21,9 +26,11 @@ export default async function AppLayout({
 
   const { data: perfil } = await supabase
     .from("perfis")
-    .select("nome, petshop_id, petshops(nome, whatsapp_status)")
+    .select("nome, petshop_id, role, permissoes, ativo, ultimo_uso_em, petshops(nome, whatsapp_status)")
     .eq("id", user.id)
     .single();
+
+  if (perfil && !perfil.ativo) redirect("/suspenso");
 
   const petshop = perfil?.petshops as unknown as {
     nome: string;
@@ -41,19 +48,37 @@ export default async function AppLayout({
       .maybeSingle();
     if (status?.status === "congelado") redirect("/suspenso");
   }
-  const admin = ehAdmin(user.email);
+
+  const suporte = await lerSuporte(user.id);
+  const dono = perfil?.role === "dono";
+  const menu = {
+    // No modo suporte o admin vê exatamente o que o usuário vê.
+    admin: !suporte && ehAdmin(user.email),
+    dono,
+    modulos: dono ? TODOS_MODULOS : lerModulos(perfil?.permissoes),
+  };
+
+  // "Está usando?" do painel admin: marca o uso no máximo a cada 5 min, e
+  // nunca enquanto o admin está vendo a conta pelo suporte.
+  if (perfil && !suporte) {
+    const ultimoUso = perfil.ultimo_uso_em as string | null;
+    after(() => registrarUso(user.id, ultimoUso));
+  }
 
   return (
-    <div className="flex min-h-screen bg-gray-50">
-      <Sidebar admin={admin} />
-      <div className="flex min-w-0 flex-1 flex-col">
-        <Topbar
-          petshopNome={petshop?.nome ?? "BubblePet"}
-          donoNome={perfil?.nome ?? user.email ?? ""}
-          whatsappConectado={petshop?.whatsapp_status === "conectado"}
-          admin={admin}
-        />
-        <main className="flex-1 p-4 md:p-6">{children}</main>
+    <div className="flex min-h-screen flex-col bg-gray-50">
+      {suporte && <SuporteBanner usuario={suporte.alvoNome} petshop={suporte.petshopNome} />}
+      <div className="flex min-h-0 flex-1">
+        <Sidebar menu={menu} />
+        <div className="flex min-w-0 flex-1 flex-col">
+          <Topbar
+            petshopNome={petshop?.nome ?? "BubblePet"}
+            donoNome={perfil?.nome ?? user.email ?? ""}
+            whatsappConectado={petshop?.whatsapp_status === "conectado"}
+            menu={menu}
+          />
+          <main className="flex-1 p-4 md:p-6">{children}</main>
+        </div>
       </div>
     </div>
   );

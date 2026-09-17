@@ -17,6 +17,8 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { FormSelect } from "@/components/shared/FormSelect";
+import { CurrencyInput } from "@/components/shared/CurrencyInput";
+import { formatCentavos, parseCentavos } from "@/lib/currency";
 import { createPet, deletePet, updatePet } from "./actions";
 import { assinarPlano } from "./planos-actions";
 import { AssinaturaSection } from "./AssinaturaSection";
@@ -61,6 +63,8 @@ function PetForm({
   onCancel: () => void;
 }) {
   const isEdit = !!pet;
+  const [planoId, setPlanoId] = useState("");
+  const planoEscolhido = planos.find((p) => p.id === planoId);
   return (
     <form
       onSubmit={onSubmit}
@@ -124,13 +128,35 @@ function PetForm({
           <FormSelect
             id="pet-plano"
             name="plano_id"
+            value={planoId}
+            onValueChange={setPlanoId}
             placeholder="Sem plano"
-            options={planos.map((plano) => ({
-              value: plano.id,
-              label: plano.nome,
-              hint: `${plano.creditos_mes} banho${plano.creditos_mes === 1 ? "" : "s"} por mês`,
-            }))}
+            options={[
+              { value: "", label: "Sem plano" },
+              ...planos.map((plano) => ({
+                value: plano.id,
+                label: plano.nome,
+                hint: `${plano.creditos_mes} banho${plano.creditos_mes === 1 ? "" : "s"} por mês · ${formatCentavos(plano.preco_centavos)}`,
+              })),
+            ]}
           />
+          {planoEscolhido && (
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="pet-plano-preco" className="text-xs">
+                Valor mensal para este pet
+              </Label>
+              <CurrencyInput
+                key={planoEscolhido.id}
+                id="pet-plano-preco"
+                name="plano_preco"
+                defaultValue={formatCentavos(planoEscolhido.preco_centavos).replace("R$", "").trim()}
+              />
+              <span className="text-xs text-muted-foreground">
+                Preço base do plano: {formatCentavos(planoEscolhido.preco_centavos)}. Mude se o valor
+                combinado com esse cliente for outro.
+              </span>
+            </div>
+          )}
         </div>
       )}
       {error && (
@@ -180,6 +206,12 @@ export function PetsSheet({
     event.preventDefault();
     const formData = new FormData(event.currentTarget);
     const planoId = (formData.get("plano_id") as string) || "";
+    const precoRaw = String(formData.get("plano_preco") ?? "").trim();
+    const precoPlano = precoRaw ? parseCentavos(precoRaw) : null;
+    if (planoId && precoRaw && precoPlano == null) {
+      setError("Valor do plano inválido.");
+      return;
+    }
     setError(null);
     startTransition(async () => {
       const result = await createPet(tutor.id, formData);
@@ -189,7 +221,7 @@ export function PetsSheet({
       }
 
       if (planoId) {
-        const assinaturaResult = await assinarPlano(result.petId, planoId);
+        const assinaturaResult = await assinarPlano(result.petId, planoId, precoPlano);
         if ("error" in assinaturaResult) {
           toast.error("Pet cadastrado, mas não foi possível ativar o plano. Tente pelo card do pet.");
           fecharForm();

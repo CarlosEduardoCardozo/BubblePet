@@ -31,7 +31,7 @@ export async function notificarAgendamento(
       .eq("id", agendamentoId)
       .eq("petshop_id", petshopId)
       .maybeSingle(),
-    admin.from("petshops").select("nome").eq("id", petshopId).maybeSingle(),
+    admin.from("petshops").select("nome, endereco, modelos_mensagem").eq("id", petshopId).maybeSingle(),
   ]);
 
   const pet = um(ag?.pets as Um<{ nome: string; tutores: Um<{ id: string; nome: string; telefone: string }> }>);
@@ -61,14 +61,14 @@ export async function notificarAgendamento(
   const texto =
     tipo === "lembrete"
       ? templateLembrete({
-          petshopNome: petshop.nome,
+          petshop: { nome: petshop.nome, endereco: petshop.endereco, modelos: petshop.modelos_mensagem },
           tutorNome: tutor.nome,
           petNome: pet.nome,
           servicoNome: servico.nome,
           inicioISO: ag.inicio,
         })
       : templateConfirmacao({
-          petshopNome: petshop.nome,
+          petshop: { nome: petshop.nome, endereco: petshop.endereco, modelos: petshop.modelos_mensagem },
           tutorNome: tutor.nome,
           petNome: pet.nome,
           servicoNome: servico.nome,

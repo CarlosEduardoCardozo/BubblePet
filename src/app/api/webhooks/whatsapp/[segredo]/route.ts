@@ -137,6 +137,17 @@ export async function POST(request: Request, { params }: { params: Promise<{ seg
     return ok();
   }
 
+  const { data: petshopRow } = await admin
+    .from("petshops")
+    .select("nome, slug, endereco, modelos_mensagem")
+    .eq("id", petshopId)
+    .maybeSingle();
+  const petshopMsg = {
+    nome: petshopRow?.nome ?? "",
+    endereco: petshopRow?.endereco,
+    modelos: petshopRow?.modelos_mensagem,
+  };
+
   if (acao.tipo === "confirmar") {
     if (ag.status === "agendado") {
       await admin.from("agendamentos").update({ status: "confirmado" }).eq("id", ag.id);
@@ -146,22 +157,28 @@ export async function POST(request: Request, { params }: { params: Promise<{ seg
       tutorId: tutor.id,
       numeroE164: tutor.telefone,
       tipo: "confirmacao",
-      texto: templateRespostaConfirmado(pet.nome, ag.inicio),
+      texto: templateRespostaConfirmado({
+        petshop: petshopMsg,
+        tutorNome: tutor.nome,
+        petNome: pet.nome,
+        inicioISO: ag.inicio,
+      }),
     });
   } else {
     // O trigger estornar_credito_ao_cancelar devolve o crédito do plano.
     await admin.from("agendamentos").update({ status: "cancelado" }).eq("id", ag.id);
-    const { data: petshop } = await admin.from("petshops").select("slug").eq("id", petshopId).maybeSingle();
     await enviarMensagemWhatsapp({
       petshopId,
       tutorId: tutor.id,
       numeroE164: tutor.telefone,
       tipo: "confirmacao",
-      texto: templateRespostaCancelado(
-        pet.nome,
-        ag.inicio,
-        petshop?.slug ? `${await appUrl()}/agendar/${petshop.slug}` : undefined
-      ),
+      texto: templateRespostaCancelado({
+        petshop: petshopMsg,
+        tutorNome: tutor.nome,
+        petNome: pet.nome,
+        inicioISO: ag.inicio,
+        linkAgendar: petshopRow?.slug ? `${await appUrl()}/agendar/${petshopRow.slug}` : undefined,
+      }),
     });
   }
 

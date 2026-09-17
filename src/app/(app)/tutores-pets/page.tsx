@@ -79,7 +79,7 @@ export default async function TutoresPetsPage({
 
   const { data: planos } = await supabase
     .from("planos")
-    .select("id, nome, creditos_mes")
+    .select("id, nome, creditos_mes, preco_centavos")
     .eq("ativo", true)
     .order("nome");
 

@@ -1,5 +1,6 @@
 "use server";
 
+import { semPermissao } from "@/lib/acesso";
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
@@ -63,6 +64,8 @@ function readPlanoForm(formData: FormData): PlanoFormResult {
 }
 
 export async function createPlano(formData: FormData): Promise<ActionResult> {
+  const bloqueio = await semPermissao("planos");
+  if (bloqueio) return bloqueio;
   const parsed = readPlanoForm(formData);
   if ("error" in parsed) return { error: parsed.error };
 
@@ -82,6 +85,8 @@ export async function updatePlano(
   id: string,
   formData: FormData
 ): Promise<ActionResult> {
+  const bloqueio = await semPermissao("planos");
+  if (bloqueio) return bloqueio;
   const parsed = readPlanoForm(formData);
   if ("error" in parsed) return { error: parsed.error };
 
@@ -94,6 +99,8 @@ export async function updatePlano(
 }
 
 export async function deletePlano(id: string): Promise<ActionResult> {
+  const bloqueio = await semPermissao("planos");
+  if (bloqueio) return bloqueio;
   const supabase = await createClient();
   const { error } = await supabase
     .from("planos")

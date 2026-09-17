@@ -66,7 +66,7 @@ export type Tutor = {
   proximoAgendamento?: string | null;
 };
 
-export type PlanoOption = { id: string; nome: string; creditos_mes: number };
+export type PlanoOption = { id: string; nome: string; creditos_mes: number; preco_centavos: number };
 
 function formatProximo(iso: string): string {
   const dt = DateTime.fromISO(iso).setZone(ZONE).setLocale("pt-BR");

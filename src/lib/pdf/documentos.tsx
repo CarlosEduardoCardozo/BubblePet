@@ -12,7 +12,8 @@ import {
 import { formatCentavos } from "@/lib/currency";
 import { formatPhoneBR } from "@/lib/phone";
 import type { ItemFechamento } from "@/lib/fechamento/calcular";
-import { resumirFechamento } from "@/lib/fechamento/resumo";
+import { resumirFechamento, type DataBanho } from "@/lib/fechamento/resumo";
+import { resumoFechamentoTexto } from "@/lib/whatsapp-templates";
 
 const TEAL = "#0d9488";
 const INK = "#0f172a";
@@ -66,7 +67,39 @@ const s = StyleSheet.create({
   kpi: { flex: 1, padding: 10, borderWidth: 1, borderColor: LINE, borderRadius: 4 },
   kpiValor: { fontSize: 14, fontFamily: "Helvetica-Bold", marginTop: 2 },
   secao: { fontSize: 11, fontFamily: "Helvetica-Bold", marginBottom: 6, marginTop: 8 },
+  grupo: { backgroundColor: "#f8fafc", fontFamily: "Helvetica-Bold", fontSize: 9 },
 });
+
+function LinhasBanho({ chave, nome, datas, valor }: {
+  chave: string;
+  nome: string;
+  datas: DataBanho[];
+  valor: (d: DataBanho) => { texto: string; destaque?: boolean };
+}) {
+  return (
+    <>
+      {datas.flatMap((d, idx) => {
+        const v = valor(d);
+        return [
+          <View key={`${chave}-${idx}`} style={s.linha}>
+            <Text style={s.cData}>
+              {d.data} <Text style={{ color: MUTED }}>{d.diaSemana}</Text>
+            </Text>
+            <Text style={s.cDesc}>{nome}</Text>
+            <Text style={[s.cValor, v.destaque ? { color: TEAL } : {}]}>{v.texto}</Text>
+          </View>,
+          ...d.adicionais.map((extra, j) => (
+            <View key={`${chave}-${idx}-extra-${j}`} style={s.linha}>
+              <Text style={s.cData}> </Text>
+              <Text style={[s.cDesc, { color: MUTED }]}>+ {extra.descricao}</Text>
+              <Text style={s.cValor}>{formatCentavos(extra.valorCentavos)}</Text>
+            </View>
+          )),
+        ];
+      })}
+    </>
+  );
+}
 
 function mesExtenso(competencia: string): string {
   const m = DateTime.fromISO(competencia).setLocale("pt-BR").toFormat("LLLL 'de' yyyy");
@@ -94,9 +127,7 @@ function FechamentoTutorPdf({ dados }: { dados: FechamentoPdfInput }) {
       ? `${resumo.periodo.inicio}/${ano}`
       : `${resumo.periodo.inicio} a ${resumo.periodo.fim}/${ano}`
     : mesExtenso(dados.competencia);
-  const tudoBanho = resumo.pets.every((p) => p.servicos.every((sv) => sv.nome.toLowerCase().includes("banho")));
-  const palavra = (n: number) =>
-    tudoBanho ? `banho${n === 1 ? "" : "s"}` : `atendimento${n === 1 ? "" : "s"}`;
+  const rotuloTotal = resumoFechamentoTexto(resumo).split("\n")[0] || "Total";
 
   return (
     <Document title={`Fechamento ${subtitulo} — ${dados.tutor.nome}`}>
@@ -138,27 +169,46 @@ function FechamentoTutorPdf({ dados }: { dados: FechamentoPdfInput }) {
                 <Text style={s.cDesc}>Serviço</Text>
                 <Text style={s.cValor}>Valor</Text>
               </View>
-              {pet.servicos.flatMap((sv) =>
-                sv.datas.flatMap((d, idx) => [
-                  <View key={`${sv.nome}-${idx}`} style={s.linha}>
-                    <Text style={s.cData}>
-                      {d.data} <Text style={{ color: MUTED }}>{d.diaSemana}</Text>
-                    </Text>
-                    <Text style={s.cDesc}>{sv.nome}</Text>
-                    <Text style={[s.cValor, d.coberto ? { color: TEAL } : {}]}>
-                      {d.coberto ? "incluso no plano" : formatCentavos(d.valorCentavos)}
-                    </Text>
-                  </View>,
-                  ...d.adicionais.map((extra, j) => (
-                    <View key={`${sv.nome}-${idx}-extra-${j}`} style={s.linha}>
-                      <Text style={s.cData}> </Text>
-                      <Text style={[s.cDesc, { color: MUTED }]}>+ {extra.descricao}</Text>
-                      <Text style={s.cValor}>{formatCentavos(extra.valorCentavos)}</Text>
-                    </View>
-                  )),
-                ])
-              )}
-              {pet.mensalidades.map((m, idx) => (
+              {pet.planos.flatMap((plano) => [
+                <View key={`plano-${plano.nome}`} style={[s.linha, s.grupo]}>
+                  <Text style={s.cData}>Plano</Text>
+                  <Text style={s.cDesc}>
+                    {plano.nome}
+                    {plano.banhos.length > 0
+                      ? ` — ${plano.banhos.length}${plano.creditosMes ? ` de ${plano.creditosMes}` : ""} usado${plano.banhos.length === 1 ? "" : "s"}`
+                      : ""}
+                  </Text>
+                  <Text style={s.cValor}>
+                    {plano.mensalidade ? formatCentavos(plano.mensalidade.valorCentavos) : ""}
+                  </Text>
+                </View>,
+                <LinhasBanho
+                  key={`plano-banhos-${plano.nome}`}
+                  chave={`p-${plano.nome}`}
+                  nome={plano.servicoNome ?? "Banho"}
+                  datas={plano.banhos}
+                  valor={() => ({ texto: "incluso no plano", destaque: true })}
+                />,
+              ])}
+              {pet.servicos.flatMap((sv) => [
+                ...(sv.alemDoPlano
+                  ? [
+                      <View key={`alem-${sv.nome}`} style={[s.linha, s.grupo]}>
+                        <Text style={s.cData}>A mais</Text>
+                        <Text style={s.cDesc}>Fora do plano</Text>
+                        <Text style={s.cValor}>{formatCentavos(sv.subtotalCentavos)}</Text>
+                      </View>,
+                    ]
+                  : []),
+                <LinhasBanho
+                  key={`sv-${sv.nome}`}
+                  chave={`s-${sv.nome}`}
+                  nome={sv.nome}
+                  datas={sv.datas}
+                  valor={(d) => ({ texto: formatCentavos(d.valorCentavos) })}
+                />,
+              ])}
+              {pet.outros.map((m, idx) => (
                 <View key={`m-${idx}`} style={s.linha}>
                   <Text style={s.cData}>—</Text>
                   <Text style={s.cDesc}>{m.descricao}</Text>
@@ -175,7 +225,7 @@ function FechamentoTutorPdf({ dados }: { dados: FechamentoPdfInput }) {
 
         <View style={s.total}>
           <Text style={s.totalRotulo}>
-            {resumo.totalBanhos > 0 ? `Foram ${resumo.totalBanhos} ${palavra(resumo.totalBanhos)}` : "Total"}
+            {rotuloTotal}
           </Text>
           <Text style={s.totalValor}>{formatCentavos(dados.totalCentavos)}</Text>
         </View>

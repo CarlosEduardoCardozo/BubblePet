@@ -22,7 +22,7 @@ function um<T>(v: Um<T>): T | undefined {
 }
 
 const SELECT_AGENDAMENTO =
-  "id, inicio, valor_centavos, origem_plano, adicionais, pets(id, nome, tutor_id), servicos(nome, preco_centavos)";
+  "id, inicio, valor_centavos, origem_plano, adicionais, pets(id, nome, tutor_id), servicos(nome, preco_centavos), assinaturas(planos(nome, creditos_mes))";
 
 type LinhaAgendamento = {
   id: string;
@@ -32,6 +32,7 @@ type LinhaAgendamento = {
   adicionais: Adicional[] | null;
   pets: unknown;
   servicos: unknown;
+  assinaturas: unknown;
 };
 
 function paraAgendamentos(rows: LinhaAgendamento[] | null): AgendamentoConcluido[] {
@@ -40,6 +41,7 @@ function paraAgendamentos(rows: LinhaAgendamento[] | null): AgendamentoConcluido
     const pet = um(row.pets as Um<{ id: string; nome: string; tutor_id: string }>);
     const servico = um(row.servicos as Um<{ nome: string; preco_centavos: number }>);
     if (!pet || !servico) continue;
+    const plano = um(um(row.assinaturas as Um<{ planos: Um<{ nome: string; creditos_mes: number }> }>)?.planos);
     lista.push({
       id: row.id,
       inicio: row.inicio,
@@ -48,6 +50,7 @@ function paraAgendamentos(rows: LinhaAgendamento[] | null): AgendamentoConcluido
       adicionais: row.adicionais ?? [],
       pet,
       servico,
+      plano: plano ?? null,
     });
   }
   return lista;
@@ -60,7 +63,7 @@ async function carregarAssinaturasAtivas(
 ): Promise<AssinaturaAtiva[]> {
   let query = supabase
     .from("assinaturas")
-    .select("id, inicio, pets(id, nome, tutor_id), planos(nome, preco_centavos)")
+    .select("id, inicio, preco_centavos, pets(id, nome, tutor_id), planos(nome, preco_centavos, creditos_mes, servicos(nome))")
     .eq("petshop_id", petshopId)
     .eq("status", "ativa");
   if (ateData) query = query.lte("inicio", ateData);
@@ -69,9 +72,21 @@ async function carregarAssinaturasAtivas(
   const ativas: AssinaturaAtiva[] = [];
   for (const row of data ?? []) {
     const pet = um(row.pets as Um<{ id: string; nome: string; tutor_id: string }>);
-    const plano = um(row.planos as Um<{ nome: string; preco_centavos: number }>);
+    const plano = um(
+      row.planos as Um<{ nome: string; preco_centavos: number; creditos_mes: number; servicos: Um<{ nome: string }> }>
+    );
     if (!pet || !plano) continue;
-    ativas.push({ id: row.id, pet, plano });
+    ativas.push({
+      id: row.id,
+      pet,
+      plano: {
+        nome: plano.nome,
+        preco_centavos: plano.preco_centavos,
+        creditos_mes: plano.creditos_mes,
+        servicoNome: um(plano.servicos)?.nome ?? null,
+      },
+      preco_centavos: row.preco_centavos,
+    });
   }
   return ativas;
 }

@@ -18,13 +18,14 @@ export default async function SuspensoPage() {
   const admin = createAdminClient();
   const { data: perfil } = await admin
     .from("perfis")
-    .select("petshop_id, petshops(nome, status, congelado_em)")
+    .select("petshop_id, ativo, petshops(nome, status, congelado_em)")
     .eq("id", user.id)
     .maybeSingle();
   const petshop = perfil?.petshops as unknown as
     | { nome: string; status: string; congelado_em: string | null }
     | null;
-  if (!petshop || petshop.status !== "congelado") redirect("/dashboard");
+  const usuarioDesativado = !!perfil && !perfil.ativo;
+  if (!petshop || (petshop.status !== "congelado" && !usuarioDesativado)) redirect("/dashboard");
 
   return (
     <main className="flex min-h-screen flex-1 items-center justify-center bg-gray-50 px-4 py-10">
@@ -35,13 +36,24 @@ export default async function SuspensoPage() {
         <div className="flex flex-col gap-1">
           <h1 className="text-xl font-semibold">Acesso suspenso</h1>
           <p className="text-sm text-muted-foreground">
-            O acesso de <span className="font-medium text-foreground">{petshop.nome}</span> ao
-            BubblePet está pausado. Os dados continuam guardados — assim que for liberado, tudo
-            volta como estava.
+            {petshop.status === "congelado" ? (
+              <>
+                O acesso de <span className="font-medium text-foreground">{petshop.nome}</span> ao
+                BubblePet está pausado. Os dados continuam guardados — assim que for liberado, tudo
+                volta como estava.
+              </>
+            ) : (
+              <>
+                Seu usuário em <span className="font-medium text-foreground">{petshop.nome}</span> foi
+                desativado.
+              </>
+            )}
           </p>
         </div>
         <p className="text-sm text-muted-foreground">
-          Fale com o suporte do BubblePet para reativar.
+          {petshop.status === "congelado"
+            ? "Fale com o suporte do BubblePet para reativar."
+            : "Se foi engano, peça pro dono do petshop reativar seu acesso em Equipe."}
         </p>
         <form action={logout}>
           <Button type="submit" variant="outline">

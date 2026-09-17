@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import {
   AlertTriangle,
   Check,
+  Combine,
   ChevronLeft,
   ChevronRight,
   FileText,
@@ -41,6 +42,7 @@ import {
   enviarFechamentos,
   enviarRelatorioDono,
   gerarFechamentos,
+  juntarExtratos,
   marcarPago,
   type ResultadoEnvioLote,
 } from "./actions";
@@ -61,6 +63,10 @@ export type FechamentoRow = {
   pagoEm: string | null;
   periodoInicio: string | null;
   periodoFim: string | null;
+  /** Quantos extratos em aberto o cliente tem neste mês (2+ = dá pra juntar). */
+  extratosAbertosDoCliente: number;
+  /** Extrato já enviado e o cliente teve banho depois (ex.: do plano). */
+  novidadesDepoisDoEnvio: boolean;
 };
 
 type Resumo = {
@@ -124,6 +130,8 @@ export function FinanceiroView({
   const [enviando, setEnviando] = useState<{ feitos: number; total: number } | null>(null);
   const [confirmEnvio, setConfirmEnvio] = useState(false);
   const [enviandoId, setEnviandoId] = useState<string | null>(null);
+  const [confirmGerar, setConfirmGerar] = useState(false);
+  const [juntando, setJuntando] = useState<FechamentoRow | null>(null);
 
   const mes = DateTime.fromISO(competencia, { zone: ZONE });
   const mesLabel = (() => {
@@ -138,7 +146,37 @@ export function FinanceiroView({
     router.push(`/financeiro?mes=${alvo.toFormat("yyyy-LL")}`);
   }
 
+  // Gerar antes do fim do mês fecha só o que já aconteceu: o resto do mês vai
+  // num segundo extrato. Avisa antes.
+  const hoje = DateTime.now().setZone(ZONE);
+  const diasParaFimDoMes = Math.floor(hoje.endOf("month").diff(hoje, "days").days);
+  const meioDoMes = ehMesAtual && diasParaFimDoMes >= 2;
+
+  function pedirGerar() {
+    if (meioDoMes && !confirmGerar) {
+      setConfirmGerar(true);
+      return;
+    }
+    gerar();
+  }
+
+  function juntar() {
+    if (!juntando) return;
+    const alvo = juntando;
+    startTransition(async () => {
+      const r = await juntarExtratos(alvo.tutorId, competencia);
+      setJuntando(null);
+      if ("error" in r) {
+        toast.error(r.error);
+        return;
+      }
+      toast.success(`Extratos de ${alvo.tutorNome} juntados num só. Confira e envie.`);
+      router.refresh();
+    });
+  }
+
   function gerar() {
+    setConfirmGerar(false);
     startTransition(async () => {
       const r = await gerarFechamentos(competencia);
       if ("error" in r) {
@@ -302,7 +340,7 @@ export function FinanceiroView({
               </span>
             </span>
           </div>
-          <Button onClick={gerar} disabled={ocupado}>
+          <Button onClick={pedirGerar} disabled={ocupado}>
             {isPending ? <Loader2 size={16} className="animate-spin" /> : <Receipt size={16} />}
             {rascunhos.length ? "Atualizar fechamento" : "Gerar fechamento"}
           </Button>
@@ -311,7 +349,7 @@ export function FinanceiroView({
 
       <div className="flex flex-wrap items-center gap-2">
         {resumo.pendentes === 0 && rascunhos.length > 0 && (
-          <Button variant="outline" onClick={gerar} disabled={ocupado}>
+          <Button variant="outline" onClick={pedirGerar} disabled={ocupado}>
             <RefreshCw size={16} /> Recalcular
           </Button>
         )}
@@ -362,7 +400,7 @@ export function FinanceiroView({
             title="Nenhum extrato gerado neste mês"
             description={`${resumo.clientesAFechar} cliente${resumo.clientesAFechar === 1 ? " tem" : "s têm"} banhos que já passaram e ainda não foram cobrados. Gere o fechamento pra conferir os valores e enviar.`}
             action={
-              <Button onClick={gerar} disabled={ocupado}>
+              <Button onClick={pedirGerar} disabled={ocupado}>
                 <Receipt size={16} /> Gerar fechamento
               </Button>
             }
@@ -458,6 +496,22 @@ export function FinanceiroView({
                       >
                         {enviandoId === f.id ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
                       </Button>
+                      {f.status === "aberto" && (f.extratosAbertosDoCliente > 1 || f.novidadesDepoisDoEnvio) && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          disabled={ocupado}
+                          onClick={() => setJuntando(f)}
+                          title={
+                            f.extratosAbertosDoCliente > 1
+                              ? "Esse cliente tem mais de um extrato em aberto"
+                              : "Teve banho depois que esse extrato foi enviado"
+                          }
+                        >
+                          <Combine size={14} />
+                          {f.extratosAbertosDoCliente > 1 ? "Juntar" : "Incluir novos banhos"}
+                        </Button>
+                      )}
                       <Button
                         variant={f.status === "pago" ? "ghost" : "outline"}
                         size="sm"
@@ -483,6 +537,28 @@ export function FinanceiroView({
         </div>
       )}
 
+      <ConfirmDialog
+        open={confirmGerar}
+        onOpenChange={setConfirmGerar}
+        title="Fechar antes do fim do mês?"
+        description={`Ainda faltam ${diasParaFimDoMes} dias pro mês acabar. O extrato leva só o que já aconteceu até agora; os banhos do resto do mês vão num segundo extrato. Pra mandar um só por cliente, gere no último dia do mês.`}
+        confirmLabel="Gerar mesmo assim"
+        pendingLabel="Gerando..."
+        confirmVariant="default"
+        onConfirm={gerar}
+        pending={ocupado}
+      />
+      <ConfirmDialog
+        open={!!juntando}
+        onOpenChange={(o) => !o && setJuntando(null)}
+        title={`Juntar os extratos de ${juntando?.tutorNome ?? "cliente"}?`}
+        description="Tudo que está em aberto desse cliente vira um extrato só, com todas as datas e o plano explicado. Se algum já tinha sido enviado, ele volta pra 'Não enviado' — é só reenviar o extrato completo."
+        confirmLabel="Juntar"
+        pendingLabel="Juntando..."
+        confirmVariant="default"
+        onConfirm={juntar}
+        pending={ocupado}
+      />
       <ConfirmDialog
         open={confirmEnvio}
         onOpenChange={setConfirmEnvio}

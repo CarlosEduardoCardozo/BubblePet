@@ -4,6 +4,8 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { ehAdmin } from "@/lib/admin";
+import { redirect } from "next/navigation";
+import { iniciarSuporte } from "@/lib/suporte";
 
 type ActionResult = { error: string } | { success: true };
 
@@ -46,4 +48,16 @@ export async function alterarStatusPetshop(
 
   revalidatePath("/admin");
   return { success: true };
+}
+
+/**
+ * Entra na conta do usuário pra acompanhar o uso e ajudar (modo suporte). O
+ * usuário não é avisado; o acesso fica registrado em acessos_suporte.
+ */
+export async function entrarComo(userId: string): Promise<ActionResult> {
+  const admin = await exigirAdmin();
+  if (!admin) return { error: "Sem permissão." };
+  const r = await iniciarSuporte(userId);
+  if ("error" in r) return r;
+  redirect("/dashboard");
 }

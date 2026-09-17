@@ -42,6 +42,7 @@ export function PlanosTable({
   totalPages,
   servicos,
   assinantesPorPlano,
+  receitaPorPlano,
   receitaRecorrenteCentavos,
   totalPlanos,
 }: {
@@ -51,6 +52,7 @@ export function PlanosTable({
   totalPages: number;
   servicos: ServicoOption[];
   assinantesPorPlano: Record<string, number>;
+  receitaPorPlano: Record<string, number>;
   receitaRecorrenteCentavos: number;
   totalPlanos: number;
 }) {
@@ -168,7 +170,7 @@ export function PlanosTable({
                       </Button>
                     </TableCell>
                     <TableCell className="hidden lg:table-cell">
-                      {formatCentavos(assinantes * plano.preco_centavos)}
+                      {formatCentavos(receitaPorPlano[plano.id] ?? assinantes * plano.preco_centavos)}
                     </TableCell>
                     <TableCell>
                       <div className="flex justify-end gap-1">

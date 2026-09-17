@@ -1,5 +1,6 @@
 "use server";
 
+import { semPermissao } from "@/lib/acesso";
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
@@ -70,6 +71,8 @@ const ERROS_TUTOR = {
 };
 
 export async function createTutor(formData: FormData): Promise<ActionResult> {
+  const bloqueio = await semPermissao("clientes");
+  if (bloqueio) return bloqueio;
   const parsed = readTutorForm(formData);
   if ("error" in parsed) return { error: parsed.error };
 
@@ -89,6 +92,8 @@ export async function updateTutor(
   id: string,
   formData: FormData
 ): Promise<ActionResult> {
+  const bloqueio = await semPermissao("clientes");
+  if (bloqueio) return bloqueio;
   const parsed = readTutorForm(formData);
   if ("error" in parsed) return { error: parsed.error };
 
@@ -103,6 +108,8 @@ export async function updateTutor(
 // Soft-delete: o histórico de agendamentos e fechamentos continua íntegro.
 // Delete físico estourava a FK de agendamentos na frente do usuário.
 export async function deleteTutor(id: string): Promise<ActionResult> {
+  const bloqueio = await semPermissao("clientes");
+  if (bloqueio) return bloqueio;
   const supabase = await createClient();
   const { error } = await supabase.from("tutores").update({ ativo: false }).eq("id", id);
   if (error) return { error: mensagemErroBanco(error) };
@@ -171,6 +178,8 @@ export async function createPet(
   tutorId: string,
   formData: FormData
 ): Promise<CreatePetResult> {
+  const bloqueio = await semPermissao("clientes");
+  if (bloqueio) return bloqueio;
   const parsed = readPetForm(formData);
   if ("error" in parsed) return { error: parsed.error };
 
@@ -190,6 +199,8 @@ export async function createPet(
 }
 
 export async function updatePet(id: string, formData: FormData): Promise<ActionResult> {
+  const bloqueio = await semPermissao("clientes");
+  if (bloqueio) return bloqueio;
   const parsed = readPetForm(formData);
   if ("error" in parsed) return { error: parsed.error };
 
@@ -203,6 +214,8 @@ export async function updatePet(id: string, formData: FormData): Promise<ActionR
 }
 
 export async function deletePet(id: string): Promise<ActionResult> {
+  const bloqueio = await semPermissao("clientes");
+  if (bloqueio) return bloqueio;
   const supabase = await createClient();
   const { error } = await supabase.from("pets").update({ ativo: false }).eq("id", id);
   if (error) return { error: mensagemErroBanco(error) };

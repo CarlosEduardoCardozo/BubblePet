@@ -5,19 +5,27 @@ import { usePathname } from "next/navigation";
 import { useState } from "react";
 import { ChevronLeft, ChevronRight, PawPrint } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { ADMIN_ITEM, NAV_ITEMS } from "./nav-items";
+import { moduloDaRota } from "@/lib/permissoes";
+import { ADMIN_ITEM, EQUIPE_ITEM, NAV_ITEMS, type MenuAcesso } from "./nav-items";
 
 export function NavLinks({
   collapsed = false,
-  admin = false,
+  menu,
   onNavigate,
 }: {
   collapsed?: boolean;
-  admin?: boolean;
+  menu: MenuAcesso;
   onNavigate?: () => void;
 }) {
   const pathname = usePathname();
-  const itens = admin ? [...NAV_ITEMS, ADMIN_ITEM] : NAV_ITEMS;
+  const itens = [
+    ...NAV_ITEMS.filter((item) => {
+      const modulo = moduloDaRota(item.href);
+      return !modulo || menu.modulos.includes(modulo);
+    }),
+    ...(menu.dono ? [EQUIPE_ITEM] : []),
+    ...(menu.admin ? [ADMIN_ITEM] : []),
+  ];
   return (
     <nav className="flex flex-1 flex-col gap-1 px-2 py-2">
       {itens.map(({ href, label, icon: Icon }) => {
@@ -56,7 +64,7 @@ export function Brand({ compact = false }: { compact?: boolean }) {
   );
 }
 
-export function Sidebar({ admin = false }: { admin?: boolean }) {
+export function Sidebar({ menu }: { menu: MenuAcesso }) {
   const [collapsed, setCollapsed] = useState(false);
 
   return (
@@ -81,7 +89,7 @@ export function Sidebar({ admin = false }: { admin?: boolean }) {
         </button>
       </div>
 
-      <NavLinks collapsed={collapsed} admin={admin} />
+      <NavLinks collapsed={collapsed} menu={menu} />
     </aside>
   );
 }

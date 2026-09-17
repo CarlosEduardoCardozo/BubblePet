@@ -1,5 +1,6 @@
 "use server";
 
+import { semPermissao } from "@/lib/acesso";
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { after } from "next/server";
@@ -198,10 +199,14 @@ async function criarAgendamentos(formData: FormData, usarPlano: boolean): Promis
 }
 
 export async function createAgendamento(formData: FormData): Promise<ResultadoCriacao> {
+  const bloqueio = await semPermissao("agenda");
+  if (bloqueio) return bloqueio;
   return criarAgendamentos(formData, false);
 }
 
 export async function createAgendamentoComPlano(formData: FormData): Promise<ResultadoCriacao> {
+  const bloqueio = await semPermissao("agenda");
+  if (bloqueio) return bloqueio;
   return criarAgendamentos(formData, true);
 }
 
@@ -209,6 +214,8 @@ export async function updateAgendamentoStatus(
   id: string,
   status: AgendamentoStatus
 ): Promise<ActionResult> {
+  const bloqueio = await semPermissao("agenda");
+  if (bloqueio) return bloqueio;
   if (!AGENDAMENTO_STATUSES.includes(status)) {
     return { error: "Status inválido" };
   }
@@ -235,6 +242,8 @@ export async function updateAgendamento(
   id: string,
   dados: { inicio: string; servicoId: string; observacoes: string; adicionais?: Adicional[] }
 ): Promise<ActionResult> {
+  const bloqueio = await semPermissao("agenda");
+  if (bloqueio) return bloqueio;
   const inicio = new Date(dados.inicio);
   if (Number.isNaN(inicio.getTime())) return { error: "Horário inválido" };
   if (!dados.servicoId) return { error: "Selecione o serviço" };
@@ -295,6 +304,8 @@ export async function updateAgendamento(
  * pago.
  */
 export async function atualizarAdicionais(id: string, adicionaisRaw: Adicional[]): Promise<ActionResult> {
+  const bloqueio = await semPermissao("agenda");
+  if (bloqueio) return bloqueio;
   const extras = lerAdicionais(adicionaisRaw);
   if (!extras.ok) return { error: extras.erro };
 
@@ -321,6 +332,8 @@ export async function atualizarAdicionais(id: string, adicionaisRaw: Adicional[]
 
 /** Arrastar na grade: só o horário muda. */
 export async function moverAgendamento(id: string, inicioISO: string): Promise<ActionResult> {
+  const bloqueio = await semPermissao("agenda");
+  if (bloqueio) return bloqueio;
   const supabase = await createClient();
   const { data: atual } = await supabase
     .from("agendamentos")
@@ -336,6 +349,8 @@ export async function moverAgendamento(id: string, inicioISO: string): Promise<A
 }
 
 export async function enviarLembrete(agendamentoId: string): Promise<ActionResult> {
+  const bloqueio = await semPermissao("agenda");
+  if (bloqueio) return bloqueio;
   const supabase = await createClient();
   const petshopId = await getCurrentPetshopId(supabase);
   const resultado = await notificarAgendamento(petshopId, agendamentoId, "lembrete");
@@ -360,6 +375,8 @@ export type PetCriado = { id: string; nome: string; tutorId: string; tutorNome: 
 export async function criarClienteEPet(
   dados: z.input<typeof novoClienteFields>
 ): Promise<{ error: string } | { success: true; pet: PetCriado }> {
+  const bloqueio = await semPermissao("agenda", "clientes");
+  if (bloqueio) return bloqueio;
   const parsed = novoClienteFields.safeParse(dados);
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Dados inválidos" };
   const d = parsed.data;

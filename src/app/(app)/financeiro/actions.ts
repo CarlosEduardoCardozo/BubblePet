@@ -1,5 +1,6 @@
 "use server";
 
+import { semPermissao } from "@/lib/acesso";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentPetshopId } from "@/lib/supabase/petshop";
@@ -29,6 +30,8 @@ function validarCompetencia(competencia: string): string | null {
 export async function gerarFechamentos(
   competenciaRaw: string
 ): Promise<{ error: string } | { success: true; gerados: number; atualizados: number; removidos: number }> {
+  const bloqueio = await semPermissao("financeiro");
+  if (bloqueio) return bloqueio;
   const competencia = validarCompetencia(competenciaRaw);
   if (!competencia) return { error: "Mês inválido." };
 
@@ -119,6 +122,52 @@ export async function gerarFechamentos(
   return { success: true, gerados, atualizados, removidos: orfaos.length };
 }
 
+/**
+ * Cliente com mais de um extrato em aberto, ou com extrato já enviado e banhos
+ * novos depois (ex.: gerou no meio do mês): junta tudo no extrato mais antigo,
+ * que volta a ficar "não enviado" pra mandar um só, completo — inclusive as
+ * datas dos banhos do plano. Extrato pago não entra.
+ */
+export async function juntarExtratos(
+  tutorId: string,
+  competenciaRaw: string
+): Promise<ActionResult> {
+  const bloqueio = await semPermissao("financeiro");
+  if (bloqueio) return bloqueio;
+  const competencia = validarCompetencia(competenciaRaw);
+  if (!competencia) return { error: "Mês inválido." };
+
+  const supabase = await createClient();
+  const { data: abertos, error } = await supabase
+    .from("fechamentos")
+    .select("id, criado_em")
+    .eq("tutor_id", tutorId)
+    .eq("status", "aberto")
+    .order("criado_em", { ascending: true });
+  if (error) return { error: mensagemErroBanco(error) };
+  if (!abertos || abertos.length === 0) return { error: "Esse cliente não tem extrato em aberto." };
+
+  const [manter, ...outros] = abertos;
+  const outrosIds = outros.map((o) => o.id);
+  // Os banhos dos outros voltam a ficar pendentes e entram no que fica.
+  const { error: erroSoltar } = await supabase
+    .from("agendamentos")
+    .update({ fechamento_id: null })
+    .in("fechamento_id", outrosIds);
+  if (erroSoltar) return { error: mensagemErroBanco(erroSoltar) };
+  const { error: erroApagar } = await supabase.from("fechamentos").delete().in("id", outrosIds);
+  if (erroApagar) return { error: mensagemErroBanco(erroApagar) };
+  const { error: erroReabrir } = await supabase
+    .from("fechamentos")
+    .update({ enviado_em: null })
+    .eq("id", manter.id);
+  if (erroReabrir) return { error: mensagemErroBanco(erroReabrir) };
+
+  const r = await gerarFechamentos(competencia);
+  if ("error" in r) return r;
+  return { success: true };
+}
+
 type Um<T> = T | T[] | null | undefined;
 function um<T>(v: Um<T>): T | undefined {
   return Array.isArray(v) ? v[0] : (v ?? undefined);
@@ -135,13 +184,15 @@ export type ResultadoEnvioLote = {
  * lotes de até 25 ids.
  */
 export async function enviarFechamentos(ids: string[]): Promise<ResultadoEnvioLote> {
+  const bloqueio = await semPermissao("financeiro");
+  if (bloqueio) return { enviados: 0, falhas: [{ tutorNome: "—", erro: bloqueio.error }] };
   const supabase = await createClient();
   const petshopId = await getCurrentPetshopId(supabase);
   const resultado: ResultadoEnvioLote = { enviados: 0, falhas: [] };
   if (ids.length === 0) return resultado;
 
   const [{ data: petshop }, { data: fechamentos }] = await Promise.all([
-    supabase.from("petshops").select("nome, chave_pix, telefone, endereco").eq("id", petshopId).single(),
+    supabase.from("petshops").select("nome, chave_pix, telefone, endereco, modelos_mensagem").eq("id", petshopId).single(),
     supabase
       .from("fechamentos")
       .select("id, tutor_id, competencia, itens, total_centavos, status, tutores(nome, telefone)")
@@ -171,7 +222,7 @@ export async function enviarFechamentos(ids: string[]): Promise<ResultadoEnvioLo
         numeroE164: tutor.telefone,
         tipo: "fechamento",
         texto: templateFechamento({
-          petshopNome: petshop.nome,
+          petshop: { nome: petshop.nome, endereco: petshop.endereco, modelos: petshop.modelos_mensagem },
           tutorNome: tutor.nome,
           resumo: resumirFechamento(itens),
           chavePix: petshop.chave_pix,
@@ -213,6 +264,8 @@ export async function enviarFechamentos(ids: string[]): Promise<ResultadoEnvioLo
 }
 
 export async function marcarPago(id: string, pago: boolean): Promise<ActionResult> {
+  const bloqueio = await semPermissao("financeiro");
+  if (bloqueio) return bloqueio;
   const supabase = await createClient();
   const { error } = await supabase
     .from("fechamentos")
@@ -230,6 +283,8 @@ export async function marcarPago(id: string, pago: boolean): Promise<ActionResul
 }
 
 export async function enviarRelatorioDono(competenciaRaw: string): Promise<ActionResult> {
+  const bloqueio = await semPermissao("financeiro");
+  if (bloqueio) return bloqueio;
   const competencia = validarCompetencia(competenciaRaw);
   if (!competencia) return { error: "Mês inválido." };
 

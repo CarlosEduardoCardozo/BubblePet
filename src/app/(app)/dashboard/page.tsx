@@ -10,6 +10,8 @@ import {
   Wallet,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
+import { acessoAtual, pode } from "@/lib/acesso";
+import { MODULOS } from "@/lib/permissoes";
 import { getCurrentPetshopId } from "@/lib/supabase/petshop";
 import { formatCentavos } from "@/lib/currency";
 import { competenciaDe } from "@/lib/fechamento/calcular";
@@ -59,9 +61,18 @@ function MetricCard({
   );
 }
 
-export default async function DashboardPage() {
+export default async function DashboardPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ sem_acesso?: string }>;
+}) {
+  const { sem_acesso: semAcesso } = await searchParams;
   const supabase = await createClient();
   const petshopId = await getCurrentPetshopId(supabase);
+  const acesso = await acessoAtual();
+  const verFinanceiro = pode(acesso, "financeiro");
+  const verAgenda = pode(acesso, "agenda");
+  const verClientes = pode(acesso, "clientes");
 
   const agora = DateTime.now().setZone(ZONE);
   const inicioHoje = agora.startOf("day");
@@ -102,6 +113,9 @@ export default async function DashboardPage() {
   ]);
 
   const totais = totalizar(base.fechamentos);
+  const areaNegada = semAcesso
+    ? (MODULOS.find((m) => m.valor === semAcesso)?.label ?? (semAcesso === "equipe" ? "Equipe" : null))
+    : null;
   const emAberto = (abertos ?? []).reduce((s, f) => s + f.total_centavos, 0);
   const agendamentosHoje = hoje ?? [];
   const concluidosHoje = agendamentosHoje.filter((a) => a.status === "concluido").length;
@@ -116,11 +130,20 @@ export default async function DashboardPage() {
         title={`${saudacao}!`}
         description={dataLonga.charAt(0).toUpperCase() + dataLonga.slice(1)}
         action={
-          <Button nativeButton={false} render={<Link href="/agenda" />}>
-            <CalendarPlus size={16} /> Novo agendamento
-          </Button>
+          verAgenda ? (
+            <Button nativeButton={false} render={<Link href="/agenda" />}>
+              <CalendarPlus size={16} /> Novo agendamento
+            </Button>
+          ) : undefined
         }
       />
+
+      {areaNegada && (
+        <p className="rounded-[12px] border border-warning/40 bg-warning/10 px-3 py-2 text-sm">
+          Seu usuário não tem acesso a <strong>{areaNegada}</strong>. Se precisar, peça pro dono do
+          petshop liberar em Equipe.
+        </p>
+      )}
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <MetricCard
@@ -132,28 +155,32 @@ export default async function DashboardPage() {
               ? "Nenhum atendimento marcado"
               : `${concluidosHoje} concluído${concluidosHoje === 1 ? "" : "s"}`
           }
-          href="/agenda"
+          href={verAgenda ? "/agenda" : "/dashboard"}
         />
-        <MetricCard
-          icon={Landmark}
-          label="Movimento do mês"
-          value={formatCentavos(totais.previstoCentavos)}
-          hint={`${totais.atendimentos} atendimento${totais.atendimentos === 1 ? "" : "s"} realizado${totais.atendimentos === 1 ? "" : "s"} + mensalidades`}
-          href="/financeiro"
-        />
-        <MetricCard
-          icon={Receipt}
-          label="A receber"
-          value={formatCentavos(emAberto)}
-          hint={`${abertos?.length ?? 0} extrato${(abertos?.length ?? 0) === 1 ? "" : "s"} em aberto`}
-          href="/financeiro"
-        />
+        {verFinanceiro && (
+          <>
+            <MetricCard
+              icon={Landmark}
+              label="Movimento do mês"
+              value={formatCentavos(totais.previstoCentavos)}
+              hint={`${totais.atendimentos} atendimento${totais.atendimentos === 1 ? "" : "s"} realizado${totais.atendimentos === 1 ? "" : "s"} + mensalidades`}
+              href="/financeiro"
+            />
+            <MetricCard
+              icon={Receipt}
+              label="A receber"
+              value={formatCentavos(emAberto)}
+              hint={`${abertos?.length ?? 0} extrato${(abertos?.length ?? 0) === 1 ? "" : "s"} em aberto`}
+              href="/financeiro"
+            />
+          </>
+        )}
         <MetricCard
           icon={Wallet}
           label="Pets com plano"
           value={String(petsComPlano ?? 0)}
           hint={`${consumosMes ?? 0} banho${(consumosMes ?? 0) === 1 ? "" : "s"} de plano este mês · ${tutoresAtivos ?? 0} clientes`}
-          href="/planos"
+          href={pode(acesso, "planos") ? "/planos" : verClientes ? "/tutores-pets" : "/dashboard"}
         />
       </div>
 
@@ -161,9 +188,11 @@ export default async function DashboardPage() {
         <Card className="lg:col-span-2">
           <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle>Atendimentos de hoje</CardTitle>
-            <Link href="/agenda" className="flex items-center gap-1 text-sm text-primary hover:underline">
-              Ver agenda <ChevronRight size={14} />
-            </Link>
+            {verAgenda && (
+              <Link href="/agenda" className="flex items-center gap-1 text-sm text-primary hover:underline">
+                Ver agenda <ChevronRight size={14} />
+              </Link>
+            )}
           </CardHeader>
           <CardContent>
             {erroHoje ? (
@@ -223,21 +252,27 @@ export default async function DashboardPage() {
             <CardTitle>Atalhos</CardTitle>
           </CardHeader>
           <CardContent className="flex flex-col gap-2">
-            <Link href="/tutores-pets" className="flex items-center gap-3 rounded-[8px] border border-border px-3 py-2.5 text-sm transition-colors hover:bg-muted">
-              <UserPlus size={16} className="text-primary" />
-              <span className="flex-1">Cadastrar cliente e pet</span>
-              <ChevronRight size={14} className="text-muted-foreground" />
-            </Link>
-            <Link href="/agenda" className="flex items-center gap-3 rounded-[8px] border border-border px-3 py-2.5 text-sm transition-colors hover:bg-muted">
-              <CalendarPlus size={16} className="text-primary" />
-              <span className="flex-1">Marcar um banho</span>
-              <ChevronRight size={14} className="text-muted-foreground" />
-            </Link>
-            <Link href="/financeiro" className="flex items-center gap-3 rounded-[8px] border border-border px-3 py-2.5 text-sm transition-colors hover:bg-muted">
-              <Receipt size={16} className="text-primary" />
-              <span className="flex-1">Fechar o mês e enviar extratos</span>
-              <ChevronRight size={14} className="text-muted-foreground" />
-            </Link>
+            {verClientes && (
+              <Link href="/tutores-pets" className="flex items-center gap-3 rounded-[8px] border border-border px-3 py-2.5 text-sm transition-colors hover:bg-muted">
+                <UserPlus size={16} className="text-primary" />
+                <span className="flex-1">Cadastrar cliente e pet</span>
+                <ChevronRight size={14} className="text-muted-foreground" />
+              </Link>
+            )}
+            {verAgenda && (
+              <Link href="/agenda" className="flex items-center gap-3 rounded-[8px] border border-border px-3 py-2.5 text-sm transition-colors hover:bg-muted">
+                <CalendarPlus size={16} className="text-primary" />
+                <span className="flex-1">Marcar um banho</span>
+                <ChevronRight size={14} className="text-muted-foreground" />
+              </Link>
+            )}
+            {verFinanceiro && (
+              <Link href="/financeiro" className="flex items-center gap-3 rounded-[8px] border border-border px-3 py-2.5 text-sm transition-colors hover:bg-muted">
+                <Receipt size={16} className="text-primary" />
+                <span className="flex-1">Fechar o mês e enviar extratos</span>
+                <ChevronRight size={14} className="text-muted-foreground" />
+              </Link>
+            )}
             <div className="mt-2 rounded-[8px] bg-primary/5 px-3 py-2.5 text-xs text-muted-foreground">
               <span className="font-medium text-foreground">Planos este mês:</span>{" "}
               {totais.atendimentosCobertos} de {totais.atendimentos} atendimentos realizados foram

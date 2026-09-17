@@ -28,12 +28,16 @@ export type AgendamentoConcluido = {
   adicionais?: Adicional[] | null;
   pet: { id: string; nome: string; tutor_id: string };
   servico: { nome: string; preco_centavos: number };
+  /** Plano que cobriu o atendimento (só quando origem_plano). */
+  plano?: { nome: string; creditos_mes: number } | null;
 };
 
 export type AssinaturaAtiva = {
   id: string;
   pet: { id: string; nome: string; tutor_id: string };
-  plano: { nome: string; preco_centavos: number };
+  plano: { nome: string; preco_centavos: number; creditos_mes?: number; servicoNome?: string | null };
+  /** Valor combinado pra este pet; null = preço do plano. */
+  preco_centavos?: number | null;
 };
 
 export type ItemFechamento = {
@@ -49,6 +53,11 @@ export type ItemFechamento = {
   assinaturaId?: string;
   /** Mês da mensalidade (yyyy-MM-dd) — evita cobrar a mesma duas vezes. */
   competencia?: string;
+  /** Mensalidade e banho coberto: nome do plano (agrupa no extrato). */
+  planoNome?: string;
+  /** Mensalidade: banhos por mês e serviço do plano. */
+  creditosMes?: number;
+  servicoNome?: string;
 };
 
 export type FechamentoTutor = {
@@ -85,9 +94,12 @@ export function calcularFechamentos(input: {
         ? `${a.plano.nome} — mensalidade de ${mesMensalidade}`
         : `Mensalidade — ${a.plano.nome}`,
       petNome: a.pet.nome,
-      valorCentavos: a.plano.preco_centavos,
+      valorCentavos: a.preco_centavos ?? a.plano.preco_centavos,
       assinaturaId: a.id,
       competencia: input.competencia,
+      planoNome: a.plano.nome,
+      creditosMes: a.plano.creditos_mes,
+      servicoNome: a.plano.servicoNome ?? undefined,
     });
   }
 
@@ -102,6 +114,7 @@ export function calcularFechamentos(input: {
       valorCentavos: valor,
       cobertoPlano: ag.origem_plano,
       agendamentoId: ag.id,
+      ...(ag.origem_plano && ag.plano ? { planoNome: ag.plano.nome, creditosMes: ag.plano.creditos_mes } : {}),
     });
     // Extras são cobrados mesmo quando o banho é coberto pelo plano.
     for (const extra of ag.adicionais ?? []) {

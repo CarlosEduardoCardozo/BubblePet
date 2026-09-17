@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { semPermissao } from "@/lib/acesso";
 import { nomeArquivoExtrato, renderFechamentoPdf } from "@/lib/pdf/documentos";
 import type { ItemFechamento } from "@/lib/fechamento/calcular";
 
@@ -21,6 +22,7 @@ export async function GET(
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return new Response("Não autorizado", { status: 401 });
+  if (await semPermissao("financeiro")) return new Response("Sem acesso ao financeiro", { status: 403 });
 
   const { data: f } = await supabase
     .from("fechamentos")

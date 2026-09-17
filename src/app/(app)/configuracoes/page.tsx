@@ -1,5 +1,6 @@
 import QRCode from "qrcode";
 import Link from "next/link";
+import { ChevronRight, MessageSquareText } from "lucide-react";
 import { appUrl } from "@/lib/app-url";
 import { horarioDoDia, horarioDoPetshop } from "@/lib/agenda/slots";
 import { garantirWebhook } from "@/lib/whatsapp";
@@ -109,6 +110,21 @@ export default async function ConfiguracoesPage({
             telefonePetshop={petshop.telefone}
             mensagens={(mensagens ?? []) as MensagemLog[]}
           />
+          <Link
+            href="/configuracoes/mensagens"
+            className="group flex items-center gap-3 rounded-[12px] border border-border bg-white px-4 py-3 transition-colors hover:border-primary/50"
+          >
+            <span className="flex size-9 shrink-0 items-center justify-center rounded-[10px] bg-primary/10 text-primary">
+              <MessageSquareText size={18} />
+            </span>
+            <span className="flex min-w-0 flex-1 flex-col">
+              <span className="text-sm font-medium">Mensagens do WhatsApp</span>
+              <span className="text-xs text-muted-foreground">
+                Personalize confirmação, lembrete, respostas e fechamento.
+              </span>
+            </span>
+            <ChevronRight size={16} className="text-muted-foreground group-hover:text-primary" />
+          </Link>
           <LinkPublicoCard
             slug={petshop.slug}
             baseUrl={baseUrl}

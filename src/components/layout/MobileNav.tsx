@@ -5,8 +5,9 @@ import { Menu } from "lucide-react";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Brand, NavLinks } from "./Sidebar";
+import type { MenuAcesso } from "./nav-items";
 
-export function MobileNav({ admin = false }: { admin?: boolean }) {
+export function MobileNav({ menu }: { menu: MenuAcesso }) {
   const [open, setOpen] = useState(false);
 
   return (
@@ -27,7 +28,7 @@ export function MobileNav({ admin = false }: { admin?: boolean }) {
           <div className="flex h-14 items-center px-4">
             <Brand />
           </div>
-          <NavLinks admin={admin} onNavigate={() => setOpen(false)} />
+          <NavLinks menu={menu} onNavigate={() => setOpen(false)} />
         </SheetContent>
       </Sheet>
     </>

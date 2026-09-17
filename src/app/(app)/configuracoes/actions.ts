@@ -1,5 +1,6 @@
 "use server";
 
+import { semPermissao } from "@/lib/acesso";
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
@@ -73,6 +74,8 @@ function lerHorarioSemanaForm(
 }
 
 export async function updatePetshop(formData: FormData): Promise<ActionResult> {
+  const bloqueio = await semPermissao("configuracoes");
+  if (bloqueio) return bloqueio;
   const parsed = petshopFields.safeParse({
     nome: formData.get("nome"),
     telefone: formData.get("telefone") ?? "",
@@ -123,6 +126,8 @@ export async function updatePetshop(formData: FormData): Promise<ActionResult> {
 }
 
 export async function updateSlug(slugRaw: string): Promise<ActionResult> {
+  const bloqueio = await semPermissao("configuracoes");
+  if (bloqueio) return bloqueio;
   const slug = slugRaw.trim().toLowerCase();
   if (!slugValido(slug)) {
     return {
@@ -173,6 +178,8 @@ function descreverErroUazapi(error: unknown): string {
 }
 
 export async function conectarWhatsapp(opcoes?: { telefone?: string }): Promise<EstadoConexao> {
+  const bloqueio = await semPermissao("configuracoes");
+  if (bloqueio) return bloqueio;
   const supabase = await createClient();
   const petshopId = await getCurrentPetshopId(supabase);
   const admin = createAdminClient();
@@ -248,6 +255,8 @@ async function sincronizarStatus(petshopId: string, token: string): Promise<Esta
 }
 
 export async function verificarWhatsapp(): Promise<EstadoConexao> {
+  const bloqueio = await semPermissao("configuracoes");
+  if (bloqueio) return bloqueio;
   const supabase = await createClient();
   const petshopId = await getCurrentPetshopId(supabase);
   const token = await obterTokenWhatsapp(petshopId);
@@ -261,6 +270,8 @@ export async function verificarWhatsapp(): Promise<EstadoConexao> {
 }
 
 export async function desconectarWhatsapp(): Promise<ActionResult> {
+  const bloqueio = await semPermissao("configuracoes");
+  if (bloqueio) return bloqueio;
   const supabase = await createClient();
   const petshopId = await getCurrentPetshopId(supabase);
   const token = await obterTokenWhatsapp(petshopId);
@@ -285,6 +296,8 @@ export async function desconectarWhatsapp(): Promise<ActionResult> {
 }
 
 export async function enviarMensagemTeste(): Promise<ActionResult> {
+  const bloqueio = await semPermissao("configuracoes");
+  if (bloqueio) return bloqueio;
   const supabase = await createClient();
   const petshopId = await getCurrentPetshopId(supabase);
   const { data: petshop } = await supabase
