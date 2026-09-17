@@ -51,11 +51,11 @@ export default async function ConfiguracoesPage({
 
   const baseUrl = await appUrl();
   const linkPublico = `${baseUrl}/agendar/${petshop.slug}`;
-  const qrDataUrl = await QRCode.toDataURL(linkPublico, {
-    margin: 1,
-    width: 220,
-    color: { dark: "#0f172a", light: "#ffffff" },
-  });
+  const [qrDataUrl, qrImpressao] = await Promise.all([
+    QRCode.toDataURL(linkPublico, { margin: 1, width: 220, color: { dark: "#0f172a", light: "#ffffff" } }),
+    // Versão grande pra imprimir no balcão.
+    QRCode.toDataURL(linkPublico, { margin: 2, width: 1000, color: { dark: "#0f172a", light: "#ffffff" } }),
+  ]);
 
   return (
     <div className="flex flex-col gap-6">
@@ -129,6 +129,9 @@ export default async function ConfiguracoesPage({
             slug={petshop.slug}
             baseUrl={baseUrl}
             qrDataUrl={qrDataUrl}
+            qrImpressao={qrImpressao}
+            petshopNome={petshop.nome}
+            whatsappConectado={petshop.whatsapp_status === "conectado"}
           />
         </div>
       </div>

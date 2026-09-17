@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
-import { Check, Copy, ExternalLink, Link2, Pencil } from "lucide-react";
+import { AlertTriangle, Check, Copy, Download, ExternalLink, Link2, MessageCircle, Pencil } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,10 +12,16 @@ export function LinkPublicoCard({
   slug,
   baseUrl,
   qrDataUrl,
+  qrImpressao,
+  petshopNome,
+  whatsappConectado,
 }: {
   slug: string;
   baseUrl: string;
   qrDataUrl: string;
+  qrImpressao: string;
+  petshopNome: string;
+  whatsappConectado: boolean;
 }) {
   const [editando, setEditando] = useState(false);
   const [novoSlug, setNovoSlug] = useState(slug);
@@ -27,14 +33,35 @@ export function LinkPublicoCard({
   const host = baseUrl.replace(/^https?:\/\//, "");
 
   async function copiar() {
+    let ok = false;
     try {
       await navigator.clipboard.writeText(url);
-      setCopiado(true);
-      setTimeout(() => setCopiado(false), 2000);
+      ok = true;
     } catch {
-      toast.error("Não foi possível copiar. Selecione e copie manualmente.");
+      // Sem a API de área de transferência (http na rede local, navegador
+      // antigo): copia pelo jeito antigo.
+      const campo = document.createElement("textarea");
+      campo.value = url;
+      campo.setAttribute("readonly", "");
+      campo.style.position = "fixed";
+      campo.style.opacity = "0";
+      document.body.appendChild(campo);
+      campo.select();
+      ok = document.execCommand("copy");
+      campo.remove();
+    }
+    if (ok) {
+      setCopiado(true);
+      toast.success("Link copiado.");
+      setTimeout(() => setCopiado(false), 2000);
+    } else {
+      toast.error("Não foi possível copiar. Selecione o link e copie manualmente.");
     }
   }
+
+  const textoWhatsapp = encodeURIComponent(
+    `Agora dá pra agendar o banho do seu pet na ${petshopNome} pelo celular: ${url}`
+  );
 
   function salvarSlug(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -63,6 +90,15 @@ export function LinkPublicoCard({
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
+        {!whatsappConectado && (
+          <p className="flex items-start gap-2 rounded-[12px] border border-warning/40 bg-warning/10 px-3 py-2 text-xs">
+            <AlertTriangle size={14} className="mt-0.5 shrink-0" />
+            <span>
+              <strong>Link em pausa.</strong> O tutor entra com um código que chega pelo WhatsApp do
+              petshop — conecte o WhatsApp acima pra liberar o agendamento online.
+            </span>
+          </p>
+        )}
         <div className="flex items-start gap-4">
           {/* eslint-disable-next-line @next/next/no-img-element -- data URL gerada no servidor */}
           <img
@@ -105,7 +141,10 @@ export function LinkPublicoCard({
               </form>
             ) : (
               <>
-                <code className="truncate rounded-[8px] bg-muted px-2 py-1.5 font-mono text-xs">
+                <code
+                  className="select-all break-all rounded-[8px] bg-muted px-2 py-1.5 font-mono text-xs"
+                  title="Clique pra selecionar"
+                >
                   {url}
                 </code>
                 <div className="flex flex-wrap gap-1.5">
@@ -125,6 +164,24 @@ export function LinkPublicoCard({
                   >
                     <ExternalLink size={14} />
                     Abrir
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    nativeButton={false}
+                    render={<a href={`https://wa.me/?text=${textoWhatsapp}`} target="_blank" rel="noreferrer" />}
+                  >
+                    <MessageCircle size={14} />
+                    Enviar no WhatsApp
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    nativeButton={false}
+                    render={<a href={qrImpressao} download={`qrcode-agendamento-${slug}.png`} />}
+                  >
+                    <Download size={14} />
+                    Baixar QR
                   </Button>
                 </div>
               </>

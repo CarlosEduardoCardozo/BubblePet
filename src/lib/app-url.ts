@@ -19,16 +19,38 @@ export async function urlDaRequisicao(): Promise<string | null> {
   }
 }
 
+/** Endereço de produção, usado quando o painel roda no computador (localhost). */
+const URL_PRODUCAO = "https://bubblepets.vercel.app";
+
+/** localhost, 127.x e IPs de rede interna não abrem no celular do tutor. */
+function enderecoLocal(url: string): boolean {
+  const host = url.replace(/^https?:\/\//, "").split(/[/:]/)[0] ?? "";
+  return (
+    host === "localhost" ||
+    host.endsWith(".local") ||
+    /^127\./.test(host) ||
+    /^10\./.test(host) ||
+    /^192\.168\./.test(host) ||
+    /^172\.(1[6-9]|2\d|3[01])\./.test(host)
+  );
+}
+
 /** Fallback sem requisição: variável de ambiente ou domínio da Vercel. */
 function urlConfigurada(): string {
   const configurada = process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "");
-  if (configurada && !configurada.includes("localhost")) return configurada;
+  if (configurada && !enderecoLocal(configurada)) return configurada;
   const vercel = process.env.VERCEL_PROJECT_PRODUCTION_URL;
   if (vercel) return `https://${vercel}`;
-  return configurada ?? "http://localhost:3000";
+  return URL_PRODUCAO;
 }
 
-/** URL pública do app pra links mostrados ou enviados (QR code, remarcar). */
+/**
+ * URL pública do app pra links que vão pro tutor (QR code, link de
+ * agendamento, remarcar). Nunca devolve localhost: rodando no computador,
+ * aponta pra versão publicada — é ela que abre no celular do cliente.
+ */
 export async function appUrl(): Promise<string> {
-  return (await urlDaRequisicao()) ?? urlConfigurada();
+  const daRequisicao = await urlDaRequisicao();
+  if (daRequisicao && !enderecoLocal(daRequisicao)) return daRequisicao;
+  return urlConfigurada();
 }
