@@ -56,7 +56,7 @@ export function AssinantesSheet({
 
     const { data, error } = await supabase
       .from("assinaturas")
-      .select("id, pets(nome, tutores(nome))")
+      .select("id, pets(nome, tutores(nome)), assinatura_pets_adicionais(pets(nome))")
       .eq("plano_id", planoId)
       .eq("status", "ativa")
       .order("criado_em");
@@ -69,6 +69,7 @@ export function AssinantesSheet({
     const rows = (data ?? []) as unknown as {
       id: string;
       pets: { nome: string; tutores: { nome: string } | { nome: string }[] } | null;
+      assinatura_pets_adicionais: { pets: { nome: string } | null }[] | null;
     }[];
 
     if (rows.length === 0) {
@@ -98,7 +99,10 @@ export function AssinantesSheet({
         const tutor = one(pet?.tutores);
         return {
           assinaturaId: row.id,
-          petNome: pet?.nome ?? "",
+          // Pets adicionais aparecem junto: "Zeca + Lola".
+          petNome: [pet?.nome ?? "", ...(row.assinatura_pets_adicionais ?? []).map((a) => a.pets?.nome ?? "")]
+            .filter(Boolean)
+            .join(" + "),
           tutorNome: tutor?.nome ?? "",
           saldo: saldoPorAssinatura.get(row.id) ?? 0,
         };

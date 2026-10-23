@@ -188,6 +188,8 @@ export function PetsSheet({
   planos: PlanoOption[];
 }) {
   const [modo, setModo] = useState<"lista" | "novo" | { editar: string }>("lista");
+  // Incluir/tirar pet adicional mexe no plano de dois pets: recarrega todos.
+  const [versaoPlanos, setVersaoPlanos] = useState(0);
   const [deletingPetId, setDeletingPetId] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -342,7 +344,14 @@ export function PetsSheet({
                   </div>
                   <div className="flex flex-col gap-1">
                     <span className="text-xs font-medium text-muted-foreground">Plano</span>
-                    <AssinaturaSection petId={pet.id} petNome={pet.nome} planos={planos} />
+                    <AssinaturaSection
+                      petId={pet.id}
+                      petNome={pet.nome}
+                      planos={planos}
+                      outrosPets={petsAtivos.filter((p) => p.id !== pet.id).map((p) => ({ id: p.id, nome: p.nome }))}
+                      versao={versaoPlanos}
+                      onAlterado={() => setVersaoPlanos((v) => v + 1)}
+                    />
                   </div>
                 </div>
               )

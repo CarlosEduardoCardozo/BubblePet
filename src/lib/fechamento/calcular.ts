@@ -38,6 +38,8 @@ export type AssinaturaAtiva = {
   plano: { nome: string; preco_centavos: number; creditos_mes?: number; servicoNome?: string | null };
   /** Valor combinado pra este pet; null = preço do plano. */
   preco_centavos?: number | null;
+  /** Outros pets no mesmo plano (saldo dividido), cada um com o valor a mais. */
+  adicionais?: { pet: { id: string; nome: string }; preco_centavos: number }[];
 };
 
 export type ItemFechamento = {
@@ -58,6 +60,8 @@ export type ItemFechamento = {
   /** Mensalidade: banhos por mês e serviço do plano. */
   creditosMes?: number;
   servicoNome?: string;
+  /** Mensalidade: valor a mais de um pet adicional no plano de outro pet. */
+  petAdicional?: boolean;
 };
 
 export type FechamentoTutor = {
@@ -101,6 +105,23 @@ export function calcularFechamentos(input: {
       creditosMes: a.plano.creditos_mes,
       servicoNome: a.plano.servicoNome ?? undefined,
     });
+    // Pet adicional: linha própria no extrato, com o valor a mais dele.
+    for (const ad of a.adicionais ?? []) {
+      push(a.pet.tutor_id, {
+        tipo: "mensalidade",
+        descricao: mesMensalidade
+          ? `${a.plano.nome} — pet adicional, ${mesMensalidade}`
+          : `Pet adicional — ${a.plano.nome}`,
+        petNome: ad.pet.nome,
+        valorCentavos: ad.preco_centavos,
+        assinaturaId: a.id,
+        competencia: input.competencia,
+        planoNome: a.plano.nome,
+        creditosMes: a.plano.creditos_mes,
+        servicoNome: a.plano.servicoNome ?? undefined,
+        petAdicional: true,
+      });
+    }
   }
 
   const ordenados = [...input.agendamentos].sort((x, y) => x.inicio.localeCompare(y.inicio));

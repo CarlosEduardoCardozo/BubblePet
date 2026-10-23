@@ -23,6 +23,8 @@ export type GrupoPlano = {
   servicoNome: string | null;
   banhos: DataBanho[];
   adicionaisCentavos: number;
+  /** O pet entra no plano de outro pet (paga só o valor a mais). */
+  petAdicional?: boolean;
 };
 
 /** Atendimentos cobrados à parte, por serviço. */
@@ -98,6 +100,7 @@ export function resumirFechamento(itens: ItemFechamento[]): ResumoFechamento {
     p.mensalidade = { descricao: i.descricao, valorCentavos: i.valorCentavos };
     p.creditosMes = i.creditosMes ?? p.creditosMes;
     p.servicoNome = i.servicoNome ?? p.servicoNome;
+    if (i.petAdicional) p.petAdicional = true;
   }
 
   const servicosOrdenados = itens

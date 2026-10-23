@@ -109,7 +109,9 @@ export async function dadosAgendamento(
     admin.from("tutores").select("nome").eq("id", tutorId).eq("petshop_id", petshopId).eq("ativo", true).maybeSingle(),
     admin
       .from("pets")
-      .select("id, nome, especie, porte, assinaturas(id, status, planos(nome, creditos_mes, servico_id, ativo))")
+      .select(
+        "id, nome, especie, porte, assinaturas(id, status, planos(nome, creditos_mes, servico_id, ativo)), assinatura_pets_adicionais(assinaturas(id, status, planos(nome, creditos_mes, servico_id, ativo)))"
+      )
       .eq("petshop_id", petshopId)
       .eq("tutor_id", tutorId)
       .eq("ativo", true)
@@ -131,7 +133,12 @@ export async function dadosAgendamento(
 
   const assinaturasAtivas: { petId: string; assinaturaId: string; servicoId: string; planoNome: string; creditosMes: number }[] = [];
   for (const pet of pets ?? []) {
-    for (const a of (pet.assinaturas as unknown as AssinaturaRow[]) ?? []) {
+    // Plano próprio primeiro; depois os planos de outro pet em que este entra
+    // como pet adicional (mesmo saldo, dividido).
+    const comoAdicional = ((pet.assinatura_pets_adicionais as unknown as { assinaturas: Um<AssinaturaRow> }[]) ?? [])
+      .map((ad) => um(ad.assinaturas))
+      .filter((a): a is AssinaturaRow => !!a);
+    for (const a of [...((pet.assinaturas as unknown as AssinaturaRow[]) ?? []), ...comoAdicional]) {
       const plano = um(a.planos);
       if (a.status !== "ativa" || !plano?.ativo) continue;
       assinaturasAtivas.push({
@@ -158,6 +165,7 @@ export async function dadosAgendamento(
   const planoDoPet = new Map<string, string>();
   for (const a of assinaturasAtivas) {
     coberturas[a.petId] ??= {};
+    if (coberturas[a.petId][a.servicoId]) continue;
     coberturas[a.petId][a.servicoId] = {
       planoNome: a.planoNome,
       saldo: saldoPorAssinatura.get(a.assinaturaId) ?? 0,
@@ -295,17 +303,13 @@ export async function agendarPublico(params: {
   // O saldo que vale é o do mês da data escolhida (pode ser o mês que vem).
   let coberto = !!cobertura && cobertura.saldo > 0;
   if (cobertura && !inicio.hasSame(DateTime.now().setZone(ZONE), "month")) {
-    const { data: assinatura } = await admin
-      .from("assinaturas")
-      .select("id, planos!inner(servico_id)")
-      .eq("pet_id", params.petId)
-      .eq("status", "ativa")
-      .eq("planos.servico_id", params.servicoId)
-      .limit(1)
-      .maybeSingle();
-    if (assinatura) {
+    const { data: assinaturaId } = await admin.rpc("assinatura_do_pet", {
+      p_pet_id: params.petId,
+      p_servico_id: params.servicoId,
+    });
+    if (assinaturaId) {
       const { data: saldo } = await admin.rpc("saldo_plano", {
-        p_assinatura_id: assinatura.id,
+        p_assinatura_id: assinaturaId,
         p_competencia: inicio.startOf("month").toISODate(),
       });
       coberto = typeof saldo === "number" && saldo > 0;

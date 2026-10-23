@@ -63,7 +63,9 @@ async function carregarAssinaturasAtivas(
 ): Promise<AssinaturaAtiva[]> {
   let query = supabase
     .from("assinaturas")
-    .select("id, inicio, preco_centavos, pets(id, nome, tutor_id), planos(nome, preco_centavos, creditos_mes, servicos(nome))")
+    .select(
+      "id, inicio, preco_centavos, pets(id, nome, tutor_id), planos(nome, preco_centavos, creditos_mes, servicos(nome)), assinatura_pets_adicionais(preco_centavos, pets(id, nome))"
+    )
     .eq("petshop_id", petshopId)
     .eq("status", "ativa");
   if (ateData) query = query.lte("inicio", ateData);
@@ -86,6 +88,12 @@ async function carregarAssinaturasAtivas(
         servicoNome: um(plano.servicos)?.nome ?? null,
       },
       preco_centavos: row.preco_centavos,
+      adicionais: ((row.assinatura_pets_adicionais as { preco_centavos: number; pets: unknown }[]) ?? []).flatMap(
+        (ad) => {
+          const p = um(ad.pets as Um<{ id: string; nome: string }>);
+          return p ? [{ pet: p, preco_centavos: ad.preco_centavos }] : [];
+        }
+      ),
     });
   }
   return ativas;

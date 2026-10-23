@@ -148,13 +148,14 @@ export function NovoAgendamentoSheet({
 
     (async () => {
       const supabase = createClient();
-      const { data: rows } = await supabase
-        .from("assinaturas")
-        .select("id, planos!inner(nome, creditos_mes, servico_id)")
-        .eq("pet_id", petId)
-        .eq("status", "ativa")
-        .eq("planos.servico_id", servicoId)
-        .limit(1);
+      // O pet pode estar no plano como titular ou como pet adicional.
+      const { data: assinaturaId } = await supabase.rpc("assinatura_do_pet", {
+        p_pet_id: petId,
+        p_servico_id: servicoId,
+      });
+      const { data: rows } = assinaturaId
+        ? await supabase.from("assinaturas").select("id, planos(nome, creditos_mes)").eq("id", assinaturaId).limit(1)
+        : { data: null };
 
       const row = rows?.[0] as unknown as
         | { id: string; planos: { nome: string; creditos_mes: number } }

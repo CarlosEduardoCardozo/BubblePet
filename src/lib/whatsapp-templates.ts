@@ -145,7 +145,7 @@ export function detalhesFechamento(resumo: ResumoFechamento): string {
     for (const plano of pet.planos) {
       linhas.push(
         plano.mensalidade
-          ? `📋 *${plano.nome}* — mensalidade: ${formatCentavos(plano.mensalidade.valorCentavos)}`
+          ? `📋 *${plano.nome}* — ${plano.petAdicional ? "pet adicional" : "mensalidade"}: ${formatCentavos(plano.mensalidade.valorCentavos)}`
           : `📋 *${plano.nome}*`
       );
       if (plano.banhos.length > 0) {

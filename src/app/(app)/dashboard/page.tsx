@@ -102,6 +102,7 @@ export default async function DashboardPage({
     { count: petsComPlano },
     { count: consumosMes },
     { count: tutoresAtivos },
+    { count: petsAdicionais },
   ] = await Promise.all([
     supabase
       .from("agendamentos")
@@ -126,6 +127,10 @@ export default async function DashboardPage({
       .from("tutores")
       .select("id", { count: "exact", head: true })
       .eq("ativo", true),
+    supabase
+      .from("assinatura_pets_adicionais")
+      .select("id, assinaturas!inner(status)", { count: "exact", head: true })
+      .eq("assinaturas.status", "ativa"),
   ]);
 
   const totais = totalizar(base.fechamentos);
@@ -196,7 +201,7 @@ export default async function DashboardPage({
         <MetricCard
           icon={Wallet}
           label="Pets com plano"
-          value={String(petsComPlano ?? 0)}
+          value={String((petsComPlano ?? 0) + (petsAdicionais ?? 0))}
           hint={`${consumosMes ?? 0} banho${(consumosMes ?? 0) === 1 ? "" : "s"} de plano este mês · ${tutoresAtivos ?? 0} clientes`}
           href={pode(acesso, "planos") ? "/planos" : verClientes ? "/tutores-pets" : "/dashboard"}
         />

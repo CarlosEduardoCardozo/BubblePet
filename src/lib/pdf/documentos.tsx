@@ -174,6 +174,7 @@ function FechamentoTutorPdf({ dados }: { dados: FechamentoPdfInput }) {
                   <Text style={s.cData}>Plano</Text>
                   <Text style={s.cDesc}>
                     {plano.nome}
+                    {plano.petAdicional ? " (pet adicional)" : ""}
                     {plano.banhos.length > 0
                       ? ` — ${plano.banhos.length}${plano.creditosMes ? ` de ${plano.creditosMes}` : ""} usado${plano.banhos.length === 1 ? "" : "s"}`
                       : ""}

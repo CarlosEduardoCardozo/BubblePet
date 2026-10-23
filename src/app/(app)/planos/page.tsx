@@ -34,7 +34,10 @@ export default async function PlanosPage({
       query,
       supabase.from("servicos").select("id, nome, duracao_min").eq("ativo", true).order("nome"),
       // Sem !inner: planos sem assinante continuam aparecendo com 0.
-      supabase.from("assinaturas").select("plano_id, preco_centavos, planos(preco_centavos)").eq("status", "ativa"),
+      supabase
+        .from("assinaturas")
+        .select("plano_id, preco_centavos, planos(preco_centavos), assinatura_pets_adicionais(preco_centavos)")
+        .eq("status", "ativa"),
     ]);
 
   const totalPages = Math.max(1, Math.ceil((count ?? 0) / PAGE_SIZE));
@@ -57,12 +60,15 @@ export default async function PlanosPage({
   const receitaPorPlano: Record<string, number> = {};
   let receitaRecorrente = 0;
   for (const row of assinaturasAtivas ?? []) {
-    assinantesPorPlano[row.plano_id] = (assinantesPorPlano[row.plano_id] ?? 0) + 1;
+    // Pets adicionais contam como pets no plano e somam o valor a mais deles.
+    const adicionais = (row.assinatura_pets_adicionais as { preco_centavos: number }[] | null) ?? [];
+    assinantesPorPlano[row.plano_id] = (assinantesPorPlano[row.plano_id] ?? 0) + 1 + adicionais.length;
     const plano = row.planos as unknown as { preco_centavos: number } | { preco_centavos: number }[] | null;
     const preco = Array.isArray(plano) ? plano[0]?.preco_centavos : plano?.preco_centavos;
     // Valor combinado com o pet vale mais que o preço base do plano.
-    receitaRecorrente += row.preco_centavos ?? preco ?? 0;
-    receitaPorPlano[row.plano_id] = (receitaPorPlano[row.plano_id] ?? 0) + (row.preco_centavos ?? preco ?? 0);
+    const receita = (row.preco_centavos ?? preco ?? 0) + adicionais.reduce((s, a) => s + a.preco_centavos, 0);
+    receitaRecorrente += receita;
+    receitaPorPlano[row.plano_id] = (receitaPorPlano[row.plano_id] ?? 0) + receita;
   }
 
   return (
