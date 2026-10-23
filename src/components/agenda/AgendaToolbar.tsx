@@ -64,7 +64,7 @@ export function AgendaToolbar({
         ))}
       </div>
 
-      <div className="flex h-8 items-center gap-0.5 rounded-[8px] bg-muted p-0.5 lg:ml-2">
+      <div className="flex h-8 items-center gap-0.5 rounded-lg bg-muted p-0.5 lg:ml-2">
         {(
           [
             ["timeGridDay", "Dia"],

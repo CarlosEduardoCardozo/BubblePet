@@ -101,7 +101,7 @@ export function PetshopForm({ petshop }: { petshop: PetshopFormData }) {
             </div>
           </div>
 
-          <div className="flex flex-col gap-3 rounded-[12px] border border-border bg-muted/30 p-4">
+          <div className="flex flex-col gap-3 rounded-xl border border-border bg-white/50 p-4">
             <span className="text-sm font-medium">Funcionamento</span>
             <HorarioSemanaEditor linhas={linhas} onChange={setLinhas} />
             <p className="-mt-1 text-xs text-muted-foreground">
@@ -141,7 +141,7 @@ export function PetshopForm({ petshop }: { petshop: PetshopFormData }) {
           </div>
 
           {error && (
-            <p role="alert" className="rounded-[12px] bg-destructive/10 px-3 py-2 text-sm text-destructive">
+            <p role="alert" className="rounded-xl bg-destructive/10 px-3 py-2 text-sm text-destructive">
               {error}
             </p>
           )}

@@ -28,14 +28,14 @@ export function Topbar({
   menu: MenuAcesso;
 }) {
   return (
-    <header className="sticky top-0 z-20 flex h-14 items-center gap-2 border-b border-border bg-white px-4 md:px-6">
+    <header className="flex h-16 items-center gap-2 px-4 pt-2 md:h-20 md:px-8 lg:pt-6 lg:pr-10 lg:pl-4">
       <MobileNav menu={menu} />
-      <span className="truncate font-semibold text-foreground">{petshopNome}</span>
+      <span className="truncate text-sm font-semibold text-muted-foreground">{petshopNome}</span>
 
-      <div className="ml-auto flex items-center gap-1">
+      <div className="ml-auto flex items-center gap-2">
         {(() => {
           const classe = cn(
-            "flex h-8 items-center gap-1.5 rounded-[8px] px-2 text-xs font-medium transition-colors",
+            "flex h-10 items-center gap-2 rounded-full glass px-3.5 text-xs font-semibold transition-colors",
             whatsappConectado ? "text-success" : "text-muted-foreground"
           );
           const titulo = whatsappConectado ? "WhatsApp conectado" : "WhatsApp desconectado";
@@ -45,7 +45,9 @@ export function Topbar({
             <span
               className={cn(
                 "size-2 rounded-full",
-                whatsappConectado ? "bg-success" : "bg-muted-foreground/50"
+                whatsappConectado
+                  ? "bg-success shadow-[0_0_0_3px_rgb(22_163_74/0.18)]"
+                  : "bg-muted-foreground/50"
               )}
             />
             <span className="hidden sm:inline">
@@ -58,7 +60,7 @@ export function Topbar({
             <Link
               href="/configuracoes"
               title={whatsappConectado ? titulo : `${titulo} — clique para conectar`}
-              className={cn(classe, "hover:bg-muted")}
+              className={cn(classe, "hover:bg-white")}
             >
               {indicador}
             </Link>
@@ -69,18 +71,25 @@ export function Topbar({
           );
         })()}
 
-        <div className="mx-1 flex items-center gap-2 sm:mx-2">
+        <div className="flex h-10 items-center gap-2 rounded-full glass py-1 pr-1 pl-1 md:pr-4">
           <Avatar className="size-8">
-            <AvatarFallback className="bg-primary/10 text-xs font-medium text-primary">
+            <AvatarFallback className="bg-sun text-xs font-bold">
               {iniciais(donoNome) || "?"}
             </AvatarFallback>
           </Avatar>
-          <span className="hidden text-sm text-muted-foreground md:inline">
+          <span className="hidden max-w-40 truncate text-sm font-semibold md:inline">
             {donoNome}
           </span>
         </div>
         <form action={logout}>
-          <Button type="submit" variant="ghost" size="icon" aria-label="Sair" title="Sair">
+          <Button
+            type="submit"
+            variant="outline"
+            size="icon"
+            className="size-10"
+            aria-label="Sair"
+            title="Sair"
+          >
             <LogOut size={16} />
           </Button>
         </form>

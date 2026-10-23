@@ -40,7 +40,7 @@ function Cartao({ children, className }: { children: React.ReactNode; className?
   return (
     <section
       className={cn(
-        "rounded-[20px] border border-primary/10 bg-white p-5 shadow-[0_8px_30px_-12px_rgba(13,148,136,0.25)]",
+        "rounded-card glass p-5 shadow-[0_14px_40px_-16px_rgba(76,29,149,0.22)]",
         className
       )}
     >
@@ -63,7 +63,7 @@ function Titulo({ children, passo }: { children: React.ReactNode; passo?: string
 function Erro({ mensagem }: { mensagem: string | null }) {
   if (!mensagem) return null;
   return (
-    <p role="alert" className="mt-3 rounded-[12px] bg-destructive/10 px-3 py-2 text-sm text-destructive">
+    <p role="alert" className="mt-3 rounded-xl bg-destructive/10 px-3 py-2 text-sm text-destructive">
       {mensagem}
     </p>
   );
@@ -535,7 +535,7 @@ function PassoAgendar({
                     onClick={() => setHora(h)}
                     aria-pressed={h === hora}
                     className={cn(
-                      "rounded-[10px] border py-2 text-sm font-medium transition-colors",
+                      "rounded-lg border py-2 text-sm font-medium transition-colors",
                       h === hora ? "border-primary bg-primary text-primary-foreground" : "border-border bg-white hover:border-primary/50"
                     )}
                   >

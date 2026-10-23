@@ -4,7 +4,7 @@ export function Skeleton({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
       data-slot="skeleton"
-      className={cn("animate-pulse rounded-[8px] bg-muted", className)}
+      className={cn("animate-pulse rounded-xl bg-foreground/[0.06]", className)}
       {...props}
     />
   );
@@ -22,7 +22,7 @@ export function ListSkeleton({ linhas = 6 }: { linhas?: number }) {
         <Skeleton className="h-8 w-32" />
       </div>
       <Skeleton className="h-9 w-full max-w-sm" />
-      <div className="overflow-hidden rounded-[12px] border border-border bg-white">
+      <div className="overflow-hidden rounded-card glass">
         {Array.from({ length: linhas }).map((_, i) => (
           <div key={i} className="flex items-center gap-4 border-b border-border px-4 py-3 last:border-b-0">
             <Skeleton className="h-4 w-1/4" />

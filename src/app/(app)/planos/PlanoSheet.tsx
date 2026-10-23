@@ -72,7 +72,7 @@ export function PlanoSheet({
 
         {servicos.length === 0 ? (
           <div className="flex flex-col gap-3 px-4 text-sm">
-            <p className="rounded-[12px] bg-warning/10 px-3 py-2 text-warning-foreground">
+            <p className="rounded-xl bg-warning/10 px-3 py-2 text-warning-foreground">
               Cadastre um serviço antes de criar um plano — o plano cobre um serviço
               específico (ex.: Banho).
             </p>
@@ -145,7 +145,7 @@ export function PlanoSheet({
               Todo dia 1 eles renovam sozinhos.
             </p>
 
-            <Label className="flex items-start gap-2.5 rounded-[12px] border border-border p-3 font-normal">
+            <Label className="flex items-start gap-2.5 rounded-xl border border-border p-3 font-normal">
               <Checkbox
                 name="permite_acumular"
                 defaultChecked={plano?.permite_acumular ?? false}
@@ -160,7 +160,7 @@ export function PlanoSheet({
             </Label>
 
             {error && (
-              <p role="alert" className="rounded-[12px] bg-destructive/10 px-3 py-2 text-sm text-destructive">
+              <p role="alert" className="rounded-xl bg-destructive/10 px-3 py-2 text-sm text-destructive">
                 {error}
               </p>
             )}

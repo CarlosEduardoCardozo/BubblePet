@@ -116,15 +116,15 @@ export function ModeloEditor({
 
         <div className="flex flex-col gap-1">
           <span className="text-xs font-medium text-muted-foreground">Como o cliente vê (exemplo)</span>
-          <div className="rounded-[12px] bg-[#e7f7ec] p-3">
-            <div className="max-w-full whitespace-pre-wrap rounded-[10px] rounded-tl-none bg-white px-3 py-2 text-sm shadow-sm">
+          <div className="rounded-xl bg-[#e7f7ec] p-3">
+            <div className="max-w-full whitespace-pre-wrap rounded-lg rounded-tl-none bg-white px-3 py-2 text-sm shadow-sm">
               <ComNegrito texto={previa} />
             </div>
           </div>
         </div>
 
         {erro && (
-          <p role="alert" className="rounded-[12px] bg-destructive/10 px-3 py-2 text-xs text-destructive">
+          <p role="alert" className="rounded-xl bg-destructive/10 px-3 py-2 text-xs text-destructive">
             {erro}
           </p>
         )}

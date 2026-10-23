@@ -111,7 +111,7 @@ export function HorarioSemanaEditor({
   }
 
   return (
-    <div className="flex flex-col divide-y divide-border rounded-[12px] border border-border bg-white">
+    <div className="flex flex-col divide-y divide-border rounded-card glass">
       {linhas.map((l) => {
         const nome = DIAS.find((d) => d.valor === l.dia)!;
         return (
@@ -130,7 +130,7 @@ export function HorarioSemanaEditor({
               >
                 <span
                   className={cn(
-                    "absolute top-0.5 size-4 rounded-full bg-white shadow transition-transform",
+                    "absolute top-0.5 left-0 size-4 rounded-full bg-white shadow transition-transform",
                     l.aberto ? "translate-x-[1.125rem]" : "translate-x-0.5"
                   )}
                 />

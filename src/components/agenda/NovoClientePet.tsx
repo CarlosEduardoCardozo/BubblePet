@@ -105,7 +105,7 @@ export function NovoClientePet({
 
   return (
     <div
-      className="flex flex-col gap-3 rounded-[12px] border border-primary/30 bg-primary/5 p-3"
+      className="flex flex-col gap-3 rounded-xl border border-primary/30 bg-primary/5 p-3"
       // Fica dentro do form do agendamento: Enter aqui cadastra o pet em vez
       // de enviar o agendamento pela metade.
       onKeyDown={(event) => {
@@ -211,7 +211,7 @@ export function NovoClientePet({
       </div>
 
       {erro && (
-        <p role="alert" className="rounded-[12px] bg-destructive/10 px-3 py-2 text-sm text-destructive">
+        <p role="alert" className="rounded-xl bg-destructive/10 px-3 py-2 text-sm text-destructive">
           {erro}
         </p>
       )}

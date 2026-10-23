@@ -174,7 +174,7 @@ export function AssinaturaSection({
   }
 
   if (estado.tipo === "carregando") {
-    return <div className="h-8 animate-pulse rounded-[8px] bg-muted" aria-label="Carregando plano" />;
+    return <div className="h-8 animate-pulse rounded-lg bg-muted" aria-label="Carregando plano" />;
   }
 
   if (estado.tipo === "erro") {
@@ -193,7 +193,7 @@ export function AssinaturaSection({
   if (assinatura) {
     return (
       <>
-        <div className="flex flex-wrap items-center justify-between gap-2 rounded-[12px] bg-primary/5 px-2.5 py-1.5 text-xs">
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-primary/5 px-2.5 py-1.5 text-xs">
           <span className="flex flex-col">
             <span>
               <span className="font-medium text-primary">{assinatura.planoNome}</span>
@@ -297,7 +297,7 @@ export function AssinaturaSection({
         }))}
       />
       {planoEscolhido && (
-        <div className="flex flex-wrap items-end gap-2 rounded-[12px] border border-border p-2">
+        <div className="flex flex-wrap items-end gap-2 rounded-xl border border-border p-2">
           <label className="flex flex-col gap-1 text-xs">
             <span className="text-muted-foreground">Valor mensal para {petNome ?? "este pet"}</span>
             <span className="w-32">

@@ -163,7 +163,7 @@ export function TutoresTable({
           />
         )
       ) : (
-        <div className="overflow-hidden rounded-[12px] border border-border bg-white">
+        <div className="overflow-hidden rounded-card glass">
           <Table>
             <TableHeader>
               <TableRow>

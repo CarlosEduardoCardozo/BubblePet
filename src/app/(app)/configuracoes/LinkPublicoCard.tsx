@@ -91,7 +91,7 @@ export function LinkPublicoCard({
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
         {!whatsappConectado && (
-          <p className="flex items-start gap-2 rounded-[12px] border border-warning/40 bg-warning/10 px-3 py-2 text-xs">
+          <p className="flex items-start gap-2 rounded-xl border border-warning/40 bg-warning/10 px-3 py-2 text-xs">
             <AlertTriangle size={14} className="mt-0.5 shrink-0" />
             <span>
               <strong>Link em pausa.</strong> O tutor entra com um código que chega pelo WhatsApp do
@@ -106,7 +106,7 @@ export function LinkPublicoCard({
             alt={`QR code do link ${url}`}
             width={110}
             height={110}
-            className="shrink-0 rounded-[8px] border border-border"
+            className="shrink-0 rounded-lg border border-border"
           />
           <div className="flex min-w-0 flex-1 flex-col gap-2">
             {editando ? (
@@ -142,7 +142,7 @@ export function LinkPublicoCard({
             ) : (
               <>
                 <code
-                  className="select-all break-all rounded-[8px] bg-muted px-2 py-1.5 font-mono text-xs"
+                  className="select-all break-all rounded-lg bg-muted px-2 py-1.5 font-mono text-xs"
                   title="Clique pra selecionar"
                 >
                   {url}

@@ -33,7 +33,7 @@ export function AgendaFilters({
   const hasFilters = !!(filters.status || filters.petId || filters.servicoId);
 
   return (
-    <div className="flex flex-col gap-3 rounded-[12px] border border-border bg-white p-3">
+    <div className="flex flex-col gap-3 rounded-card glass p-3">
       <div className="flex items-center justify-between">
         <span className="text-sm font-medium">Filtrar semana</span>
         {hasFilters && (

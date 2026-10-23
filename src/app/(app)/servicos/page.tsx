@@ -49,7 +49,7 @@ export default async function ServicosPage({
     return (
       <div className="flex flex-col gap-4">
         <PageHeader title="Serviços" />
-        <p className="rounded-[12px] bg-destructive/10 px-3 py-2 text-sm text-destructive">
+        <p className="rounded-xl bg-destructive/10 px-3 py-2 text-sm text-destructive">
           Não foi possível carregar os serviços. Recarregue a página.
         </p>
       </div>

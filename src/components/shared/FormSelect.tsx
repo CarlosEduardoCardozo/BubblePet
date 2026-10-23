@@ -51,7 +51,7 @@ export function FormSelect({
         onValueChange?.(typeof next === "string" ? next : "");
       }}
     >
-      <SelectTrigger id={id} className={cn("h-9 w-full rounded-[12px] bg-white", className)}>
+      <SelectTrigger id={id} className={cn("h-9 w-full rounded-xl bg-white/90", className)}>
         <SelectValue placeholder={placeholder}>
           {(val: unknown) => (typeof val === "string" && val ? labelFor(val) : placeholder)}
         </SelectValue>

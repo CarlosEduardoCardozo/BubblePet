@@ -28,8 +28,8 @@ export default async function SuspensoPage() {
   if (!petshop || (petshop.status !== "congelado" && !usuarioDesativado)) redirect("/dashboard");
 
   return (
-    <main className="flex min-h-screen flex-1 items-center justify-center bg-gray-50 px-4 py-10">
-      <div className="flex w-full max-w-md flex-col items-center gap-4 rounded-[12px] border border-border bg-white p-8 text-center shadow-sm">
+    <main className="flex min-h-screen flex-1 items-center justify-center px-4 py-10">
+      <div className="flex w-full max-w-md flex-col items-center gap-4 rounded-card glass p-8 text-center shadow-sm">
         <span className="flex size-12 items-center justify-center rounded-full bg-sky-100 text-sky-700">
           <Snowflake size={24} />
         </span>

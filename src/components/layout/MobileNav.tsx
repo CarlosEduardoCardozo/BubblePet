@@ -16,7 +16,7 @@ export function MobileNav({ menu }: { menu: MenuAcesso }) {
         type="button"
         variant="ghost"
         size="icon"
-        className="lg:hidden"
+        className="-ml-1 lg:hidden"
         aria-label="Abrir menu"
         onClick={() => setOpen(true)}
       >
@@ -25,7 +25,7 @@ export function MobileNav({ menu }: { menu: MenuAcesso }) {
       <Sheet open={open} onOpenChange={setOpen}>
         <SheetContent side="left" className="w-64 gap-0 p-0 sm:max-w-64">
           <SheetTitle className="sr-only">Menu</SheetTitle>
-          <div className="flex h-14 items-center px-4">
+          <div className="flex h-20 items-center px-5">
             <Brand />
           </div>
           <NavLinks menu={menu} onNavigate={() => setOpen(false)} />

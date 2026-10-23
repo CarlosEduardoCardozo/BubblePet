@@ -390,7 +390,7 @@ export function AgendaView({
 
         <div
           className={cn(
-            "flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-[12px] border border-border bg-white transition-opacity",
+            "flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-card glass transition-opacity",
             carregando && "opacity-70"
           )}
           aria-busy={carregando}

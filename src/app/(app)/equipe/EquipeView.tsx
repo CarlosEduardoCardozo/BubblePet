@@ -74,7 +74,7 @@ function SeletorAreas({ valor, onChange }: { valor: Modulo[]; onChange: (m: Modu
           );
         })}
       </div>
-      <div className="flex flex-col divide-y divide-border rounded-[12px] border border-border">
+      <div className="flex flex-col divide-y divide-border rounded-xl border border-border">
         {MODULOS.map((m) => {
           const marcado = valor.includes(m.valor);
           return (
@@ -190,7 +190,7 @@ export function EquipeView({ membros }: { membros: Membro[] }) {
         }
       />
 
-      <div className="overflow-x-auto rounded-[12px] border border-border bg-white">
+      <div className="overflow-x-auto rounded-card glass">
         <Table>
           <TableHeader>
             <TableRow>
@@ -322,7 +322,7 @@ export function EquipeView({ membros }: { membros: Membro[] }) {
               <span className="text-xs text-muted-foreground">Equipe (esta tela) é sempre só sua.</span>
             </div>
             {erro && (
-              <p role="alert" className="rounded-[12px] bg-destructive/10 px-3 py-2 text-sm text-destructive">
+              <p role="alert" className="rounded-xl bg-destructive/10 px-3 py-2 text-sm text-destructive">
                 {erro}
               </p>
             )}

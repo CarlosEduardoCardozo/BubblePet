@@ -16,7 +16,7 @@ const MESES = Array.from({ length: 12 }, (_, i) => {
 });
 
 const selectClassName =
-  "h-7 rounded-[8px] border border-input bg-transparent px-1.5 text-xs font-medium outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50";
+  "h-7 rounded-lg border border-input bg-transparent px-1.5 text-xs font-medium outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50";
 
 export function MiniCalendar({
   selectedDate,
@@ -46,12 +46,12 @@ export function MiniCalendar({
   const days = Array.from({ length: 42 }, (_, i) => gridStart.plus({ days: i }));
 
   return (
-    <div className="rounded-[12px] border border-border bg-white p-3">
+    <div className="rounded-card glass p-3">
       <div className="mb-2 flex items-center justify-between gap-1">
         <button
           type="button"
           onClick={() => setViewedMonth((m) => m.minus({ months: 1 }))}
-          className="flex size-6 shrink-0 items-center justify-center rounded-[8px] text-muted-foreground hover:bg-muted"
+          className="flex size-6 shrink-0 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted"
           aria-label="Mês anterior"
         >
           <ChevronLeft size={16} />
@@ -91,7 +91,7 @@ export function MiniCalendar({
         <button
           type="button"
           onClick={() => setViewedMonth((m) => m.plus({ months: 1 }))}
-          className="flex size-6 shrink-0 items-center justify-center rounded-[8px] text-muted-foreground hover:bg-muted"
+          className="flex size-6 shrink-0 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted"
           aria-label="Próximo mês"
         >
           <ChevronRight size={16} />

@@ -268,7 +268,7 @@ export function FinanceiroView({
         title="Financeiro"
         description="Junta os banhos que já passaram e ainda não foram cobrados, manda o extrato pelo WhatsApp e controla quem pagou."
         action={
-          <div className="flex items-center gap-1 rounded-[8px] border border-border bg-white p-0.5">
+          <div className="flex items-center gap-1 rounded-lg border border-border bg-white p-0.5">
             <Button variant="ghost" size="icon-sm" onClick={() => irParaMes(-1)} aria-label="Mês anterior">
               <ChevronLeft size={16} />
             </Button>
@@ -315,7 +315,7 @@ export function FinanceiroView({
       </div>
 
       {!petshop.temPix && (
-        <p className="flex items-center gap-2 rounded-[12px] border border-warning/40 bg-warning/10 px-3 py-2 text-sm text-warning-foreground">
+        <p className="flex items-center gap-2 rounded-xl border border-warning/40 bg-warning/10 px-3 py-2 text-sm text-warning-foreground">
           <AlertTriangle size={16} className="shrink-0" />
           <span>
             Sem chave PIX cadastrada — o extrato sai sem instrução de pagamento.{" "}
@@ -327,7 +327,7 @@ export function FinanceiroView({
       )}
 
       {resumo.pendentes > 0 && (
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-[12px] border border-primary/30 bg-primary/5 px-4 py-3">
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-primary/30 bg-primary/5 px-4 py-3">
           <div className="flex items-start gap-2 text-sm">
             <RefreshCw size={16} className="mt-0.5 shrink-0 text-primary" />
             <span>
@@ -413,7 +413,7 @@ export function FinanceiroView({
           />
         )
       ) : (
-        <div className="overflow-hidden rounded-[12px] border border-border bg-white">
+        <div className="overflow-hidden rounded-card glass">
           <Table>
             <TableHeader>
               <TableRow>

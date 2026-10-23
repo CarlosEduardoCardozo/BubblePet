@@ -50,7 +50,7 @@ export default async function TutoresPetsPage({
     return (
       <div className="flex flex-col gap-4">
         <PageHeader title="Clientes e pets" />
-        <p className="rounded-[12px] bg-destructive/10 px-3 py-2 text-sm text-destructive">
+        <p className="rounded-xl bg-destructive/10 px-3 py-2 text-sm text-destructive">
           Não foi possível carregar os clientes. Recarregue a página.
         </p>
       </div>

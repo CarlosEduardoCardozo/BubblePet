@@ -65,7 +65,7 @@ export default async function ConfiguracoesPage({
       />
 
       {bemvindo && (
-        <div className="rounded-[12px] border border-primary/30 bg-primary/5 px-4 py-3 text-sm">
+        <div className="rounded-xl border border-primary/30 bg-primary/5 px-4 py-3 text-sm">
           <p className="font-semibold text-primary">Conta criada! Bem-vindo ao BubblePet 🐾</p>
           <ol className="mt-1 list-decimal pl-5 text-muted-foreground">
             <li>Confira o horário de funcionamento e a chave PIX aqui embaixo.</li>
@@ -112,9 +112,9 @@ export default async function ConfiguracoesPage({
           />
           <Link
             href="/configuracoes/mensagens"
-            className="group flex items-center gap-3 rounded-[12px] border border-border bg-white px-4 py-3 transition-colors hover:border-primary/50"
+            className="group flex items-center gap-3 rounded-card glass px-4 py-3 transition-colors hover:border-primary/50"
           >
-            <span className="flex size-9 shrink-0 items-center justify-center rounded-[10px] bg-primary/10 text-primary">
+            <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
               <MessageSquareText size={18} />
             </span>
             <span className="flex min-w-0 flex-1 flex-col">

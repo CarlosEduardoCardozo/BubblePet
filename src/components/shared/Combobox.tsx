@@ -104,7 +104,7 @@ export function Combobox({
         id={id}
         disabled={disabled}
         className={cn(
-          "flex w-full items-center justify-between gap-1.5 rounded-[12px] border border-input bg-white pr-2 pl-2.5 text-left text-sm outline-none transition-colors focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50",
+          "flex w-full items-center justify-between gap-1.5 rounded-xl border border-input bg-white/90 pr-2 pl-3 text-left text-sm outline-none transition-colors focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50",
           size === "sm" ? "h-8" : "h-9",
           className
         )}

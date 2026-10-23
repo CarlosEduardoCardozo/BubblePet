@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 
 export default function NotFound() {
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-gray-50 px-4 text-center">
+    <div className="flex min-h-screen flex-col items-center justify-center gap-4 px-4 text-center">
       <div className="flex size-14 items-center justify-center rounded-full bg-primary/10 text-primary">
         <PawPrint size={28} />
       </div>

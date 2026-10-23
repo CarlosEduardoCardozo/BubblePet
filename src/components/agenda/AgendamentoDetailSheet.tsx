@@ -212,7 +212,7 @@ export function AgendamentoDetailSheet({
                 {!encerrado && <LembreteButton agendamentoId={dados.id} size="sm" variant="outline" />}
               </div>
 
-              <div className="flex items-center justify-between rounded-[12px] border border-border px-3 py-2.5">
+              <div className="flex items-center justify-between rounded-xl border border-border px-3 py-2.5">
                 <div className="flex flex-col text-sm">
                   <span className="font-medium">
                     {(() => {
@@ -234,8 +234,8 @@ export function AgendamentoDetailSheet({
               <div
                 className={
                   dados.origemPlano
-                    ? "rounded-[12px] bg-primary/5 px-3 py-2 text-sm"
-                    : "rounded-[12px] bg-muted px-3 py-2 text-sm"
+                    ? "rounded-xl bg-primary/5 px-3 py-2 text-sm"
+                    : "rounded-xl bg-muted px-3 py-2 text-sm"
                 }
               >
                 {dados.origemPlano ? (
@@ -260,7 +260,7 @@ export function AgendamentoDetailSheet({
               </div>
 
               {editandoExtras ? (
-                <div className="flex flex-col gap-2 rounded-[12px] border border-border p-3">
+                <div className="flex flex-col gap-2 rounded-xl border border-border p-3">
                   <span className="text-sm font-medium">Adicionais</span>
                   <AdicionaisEditor
                     linhas={linhasExtras}
@@ -269,7 +269,7 @@ export function AgendamentoDetailSheet({
                     disabled={isPending}
                   />
                   {erro && (
-                    <p role="alert" className="rounded-[12px] bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                    <p role="alert" className="rounded-xl bg-destructive/10 px-3 py-2 text-sm text-destructive">
                       {erro}
                     </p>
                   )}
@@ -283,7 +283,7 @@ export function AgendamentoDetailSheet({
                   </div>
                 </div>
               ) : dados.adicionais.length > 0 ? (
-                <div className="flex flex-col gap-1 rounded-[12px] border border-border px-3 py-2 text-sm">
+                <div className="flex flex-col gap-1 rounded-xl border border-border px-3 py-2 text-sm">
                   <div className="flex items-center justify-between">
                     <span className="text-xs text-muted-foreground">Adicionais</span>
                     {podeEditarExtras && (
@@ -423,7 +423,7 @@ export function AgendamentoDetailSheet({
               </div>
 
               {erro && (
-                <p role="alert" className="rounded-[12px] bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                <p role="alert" className="rounded-xl bg-destructive/10 px-3 py-2 text-sm text-destructive">
                   {erro}
                 </p>
               )}

@@ -55,93 +55,134 @@
   --radius-2xl: calc(var(--radius) * 1.8);
   --radius-3xl: calc(var(--radius) * 2.2);
   --radius-4xl: calc(var(--radius) * 2.6);
+  --radius-card: 24px;
+  --color-sun: var(--sun);
+  --color-sun-foreground: var(--sun-foreground);
 }
 
+/* Identidade BubblePet: roxo como cor principal, amarelo como acento.
+   Visual "vidro" no estilo Apple — fundo claro com manchas de luz coloridas,
+   cartões translúcidos com blur e botões em pílula com degradê e brilho. */
 :root {
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: #0d9488;
+  --background: #f7f5fc;
+  --foreground: #0d0a14;
+  --card: #ffffff;
+  --card-foreground: #0d0a14;
+  --popover: #ffffff;
+  --popover-foreground: #0d0a14;
+  --primary: #7c3aed;
   --primary-foreground: #ffffff;
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: #dc2626;
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: #0d9488;
+  --secondary: #f1ecfd;
+  --secondary-foreground: #3b1d7a;
+  --muted: #f1eef7;
+  --muted-foreground: #6b6478;
+  --accent: #f1ecfd;
+  --accent-foreground: #3b1d7a;
+  --sun: #ffc21a;
+  --sun-foreground: #3d2c00;
+  --destructive: #e5484d;
+  --border: rgb(45 20 90 / 0.09);
+  --input: rgb(45 20 90 / 0.13);
+  --ring: #7c3aed;
   --success: #16a34a;
   --success-foreground: #ffffff;
-  --warning: #f59e0b;
-  --warning-foreground: #78350f;
-  --status-agendado: #2563eb;
-  --status-confirmado: #0d9488;
+  --warning: #f5a700;
+  --warning-foreground: #5c3d00;
+  --status-agendado: #3b82f6;
+  --status-confirmado: #7c3aed;
   --status-concluido: #16a34a;
-  --status-cancelado: #6b7280;
-  --status-faltou: #dc2626;
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --radius: 0.625rem;
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: #0d9488;
+  --status-cancelado: #8a8494;
+  --status-faltou: #e5484d;
+  --chart-1: #7c3aed;
+  --chart-2: #ffc21a;
+  --chart-3: #a78bfa;
+  --chart-4: #f59e0b;
+  --chart-5: #4c1d95;
+  --radius: 0.75rem;
+  --sidebar: rgb(255 255 255 / 0.5);
+  --sidebar-foreground: #0d0a14;
+  --sidebar-primary: #7c3aed;
   --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: #0d9488;
+  --sidebar-accent: rgb(255 255 255 / 0.75);
+  --sidebar-accent-foreground: #0d0a14;
+  --sidebar-border: rgb(255 255 255 / 0.7);
+  --sidebar-ring: #7c3aed;
 }
 
 .dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: #14b8a6;
-  --primary-foreground: #052e2b;
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
+  --background: #0e0b16;
+  --foreground: #f5f3fa;
+  --card: #1a1525;
+  --card-foreground: #f5f3fa;
+  --popover: #1a1525;
+  --popover-foreground: #f5f3fa;
+  --primary: #a78bfa;
+  --primary-foreground: #1c0b3d;
+  --secondary: #2a2238;
+  --secondary-foreground: #f5f3fa;
+  --muted: #2a2238;
+  --muted-foreground: #a69fb5;
+  --accent: #2a2238;
+  --accent-foreground: #f5f3fa;
+  --sun: #ffd34d;
+  --sun-foreground: #2e2100;
   --destructive: #f87171;
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: #14b8a6;
+  --border: rgb(255 255 255 / 0.1);
+  --input: rgb(255 255 255 / 0.15);
+  --ring: #a78bfa;
   --success: #22c55e;
   --success-foreground: #052e16;
   --warning: #fbbf24;
   --warning-foreground: #451a03;
   --status-agendado: #60a5fa;
-  --status-confirmado: #14b8a6;
+  --status-confirmado: #a78bfa;
   --status-concluido: #22c55e;
   --status-cancelado: #9ca3af;
   --status-faltou: #f87171;
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: #14b8a6;
-  --sidebar-primary-foreground: #052e2b;
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: #14b8a6;
+  --chart-1: #a78bfa;
+  --chart-2: #ffd34d;
+  --chart-3: #c4b5fd;
+  --chart-4: #fbbf24;
+  --chart-5: #7c3aed;
+  --sidebar: rgb(26 21 37 / 0.6);
+  --sidebar-foreground: #f5f3fa;
+  --sidebar-primary: #a78bfa;
+  --sidebar-primary-foreground: #1c0b3d;
+  --sidebar-accent: rgb(255 255 255 / 0.08);
+  --sidebar-accent-foreground: #f5f3fa;
+  --sidebar-border: rgb(255 255 255 / 0.1);
+  --sidebar-ring: #a78bfa;
+}
+
+/* Cartão de vidro: translúcido, com blur, fio branco por dentro no topo e
+   sombra roxa bem suave. O raio fica por conta do rounded-card. */
+@utility glass {
+  background-color: rgb(255 255 255 / 0.6);
+  border: 1px solid rgb(255 255 255 / 0.85);
+  -webkit-backdrop-filter: blur(24px) saturate(1.4);
+  backdrop-filter: blur(24px) saturate(1.4);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.9),
+    0 14px 40px -16px rgb(76 29 149 / 0.16),
+    0 1px 2px rgb(76 29 149 / 0.04);
+}
+
+/* Degradê roxo com brilho — botão principal, item ativo do menu, destaque. */
+@utility bg-brand {
+  background-image: linear-gradient(155deg, #a47bff 0%, #7c3aed 55%, #6322d6 100%);
+  color: #ffffff;
+  box-shadow:
+    inset 1px 2px 2px rgb(255 255 255 / 0.35),
+    0 14px 30px -14px rgb(124 58 237 / 0.75);
+}
+
+/* Degradê amarelo — o acento da marca. */
+@utility bg-sun {
+  background-image: linear-gradient(155deg, #ffdc6b 0%, #ffc21a 55%, #f5a700 100%);
+  color: var(--sun-foreground);
+  box-shadow:
+    inset 1px 2px 2px rgb(255 255 255 / 0.5),
+    0 14px 30px -14px rgb(245 167 0 / 0.75);
 }
 
 @layer base {
@@ -150,6 +191,17 @@
   }
   body {
     @apply bg-background text-foreground;
+    /* Manchas de luz nos cantos: roxo em cima à esquerda, amarelo em cima à
+       direita, lilás embaixo. Fixas, pra não "andarem" com o scroll. */
+    background-image:
+      radial-gradient(42% 38% at 4% 0%, rgb(124 58 237 / 0.13) 0%, transparent 70%),
+      radial-gradient(38% 32% at 96% 4%, rgb(255 194 26 / 0.2) 0%, transparent 70%),
+      radial-gradient(50% 44% at 100% 100%, rgb(167 139 250 / 0.2) 0%, transparent 70%),
+      radial-gradient(40% 40% at 0% 100%, rgb(255 220 107 / 0.14) 0%, transparent 70%);
+    background-attachment: fixed;
+  }
+  h1, h2, h3 {
+    letter-spacing: -0.01em;
   }
   html {
     @apply font-sans;
@@ -174,15 +226,15 @@
   ) !important;
 }
 
-/* Tema da grade: linhas mais suaves, "hoje" em teal claro, indicador de agora
-   em teal, rótulos de hora pequenos e o cabeçalho dos dias fixo no scroll
+/* Tema da grade: linhas mais suaves, "hoje" em roxo claro, indicador de agora
+   em roxo, rótulos de hora pequenos e o cabeçalho dos dias fixo no scroll
    interno. */
 .fc {
-  --fc-border-color: oklch(0.94 0 0);
+  --fc-border-color: rgb(45 20 90 / 0.07);
   --fc-today-bg-color: color-mix(in srgb, var(--primary) 6%, white);
   --fc-now-indicator-color: var(--primary);
   --fc-highlight-color: color-mix(in srgb, var(--primary) 14%, white);
-  --fc-page-bg-color: #fff;
+  --fc-page-bg-color: transparent;
   --fc-event-border-color: transparent;
   --fc-event-text-color: var(--foreground);
   --fc-small-font-size: 0.75rem;

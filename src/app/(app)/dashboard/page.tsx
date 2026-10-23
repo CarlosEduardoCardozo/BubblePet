@@ -32,31 +32,47 @@ function um<T>(v: Um<T>): T | undefined {
   return Array.isArray(v) ? v[0] : (v ?? undefined);
 }
 
+const TOM_CARD = {
+  // Card de destaque: degradê roxo, número grande em branco.
+  roxo: { card: "bg-brand", icone: "bg-white/20 text-white", hint: "text-white/80", label: "text-white" },
+  amarelo: { card: "glass", icone: "bg-sun", hint: "text-muted-foreground", label: "text-foreground" },
+  lilas: { card: "glass", icone: "bg-secondary text-primary", hint: "text-muted-foreground", label: "text-foreground" },
+} as const;
+
 function MetricCard({
   icon: Icon,
   label,
   value,
   hint,
   href,
+  tom = "lilas",
 }: {
   icon: React.ElementType;
   label: string;
   value: string;
   hint?: string;
   href: string;
+  tom?: keyof typeof TOM_CARD;
 }) {
+  const t = TOM_CARD[tom];
   return (
-    <Link href={href} className="group">
-      <Card className="h-full transition-colors group-hover:border-primary/40">
-        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1">
-          <CardTitle className="text-sm font-medium text-muted-foreground">{label}</CardTitle>
-          <Icon size={18} className="text-primary" />
-        </CardHeader>
-        <CardContent className="flex flex-col gap-0.5">
-          <div className="text-2xl font-semibold tracking-tight">{value}</div>
-          {hint && <div className="text-xs text-muted-foreground">{hint}</div>}
-        </CardContent>
-      </Card>
+    <Link
+      href={href}
+      className={`group relative flex min-h-36 flex-col justify-between gap-4 overflow-hidden rounded-card p-5 transition-transform sm:min-h-44 duration-300 hover:-translate-y-0.5 ${t.card}`}
+    >
+      {tom === "roxo" && (
+        <div className="pointer-events-none absolute -top-16 -right-10 size-44 rounded-full bg-[#ffc21a]/35 blur-2xl" />
+      )}
+      <div className="relative flex items-center justify-between">
+        <span className={`text-sm font-bold ${t.label}`}>{label}</span>
+        <span className={`flex size-9 items-center justify-center rounded-full ${t.icone}`}>
+          <Icon size={17} />
+        </span>
+      </div>
+      <div className="relative flex flex-col gap-1">
+        <div className="text-4xl font-extrabold tracking-tight tabular-nums">{value}</div>
+        {hint && <div className={`text-xs font-medium ${t.hint}`}>{hint}</div>}
+      </div>
     </Link>
   );
 }
@@ -139,7 +155,7 @@ export default async function DashboardPage({
       />
 
       {areaNegada && (
-        <p className="rounded-[12px] border border-warning/40 bg-warning/10 px-3 py-2 text-sm">
+        <p className="rounded-xl border border-warning/40 bg-warning/10 px-3 py-2 text-sm">
           Seu usuário não tem acesso a <strong>{areaNegada}</strong>. Se precisar, peça pro dono do
           petshop liberar em Equipe.
         </p>
@@ -148,6 +164,7 @@ export default async function DashboardPage({
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <MetricCard
           icon={CalendarDays}
+          tom="roxo"
           label="Hoje na agenda"
           value={String(ativosHoje.length)}
           hint={
@@ -168,6 +185,7 @@ export default async function DashboardPage({
             />
             <MetricCard
               icon={Receipt}
+              tom="amarelo"
               label="A receber"
               value={formatCentavos(emAberto)}
               hint={`${abertos?.length ?? 0} extrato${(abertos?.length ?? 0) === 1 ? "" : "s"} em aberto`}
@@ -189,7 +207,7 @@ export default async function DashboardPage({
           <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle>Atendimentos de hoje</CardTitle>
             {verAgenda && (
-              <Link href="/agenda" className="flex items-center gap-1 text-sm text-primary hover:underline">
+              <Link href="/agenda" className="flex items-center gap-1 rounded-full bg-white/70 px-3 py-1.5 text-xs font-semibold text-primary transition-colors hover:bg-white">
                 Ver agenda <ChevronRight size={14} />
               </Link>
             )}
@@ -219,14 +237,14 @@ export default async function DashboardPage({
                   const podeLembrar = a.status === "agendado" || a.status === "confirmado";
                   return (
                     <li key={a.id} className="flex items-center gap-3 py-2.5 first:pt-0 last:pb-0">
-                      <div className="w-12 shrink-0 text-sm font-semibold tabular-nums">
+                      <div className="flex h-9 w-14 shrink-0 items-center justify-center rounded-xl bg-secondary text-sm font-bold text-primary tabular-nums">
                         {inicio.toFormat("HH:mm")}
                       </div>
                       <div className="flex min-w-0 flex-1 flex-col">
                         <span className="truncate text-sm font-medium">
                           {pet?.nome ?? "Pet"} · {servico?.nome ?? "Serviço"}
                           {a.origem_plano && (
-                            <span className="ml-1.5 rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary">
+                            <span className="ml-1.5 rounded-full bg-sun px-1.5 py-0.5 text-[10px] font-bold">
                               plano
                             </span>
                           )}
@@ -253,27 +271,27 @@ export default async function DashboardPage({
           </CardHeader>
           <CardContent className="flex flex-col gap-2">
             {verClientes && (
-              <Link href="/tutores-pets" className="flex items-center gap-3 rounded-[8px] border border-border px-3 py-2.5 text-sm transition-colors hover:bg-muted">
-                <UserPlus size={16} className="text-primary" />
+              <Link href="/tutores-pets" className="flex items-center gap-3 rounded-2xl bg-white/60 px-3 py-2.5 text-sm font-semibold transition-colors hover:bg-white">
+                <span className="flex size-8 items-center justify-center rounded-full bg-secondary text-primary"><UserPlus size={15} /></span>
                 <span className="flex-1">Cadastrar cliente e pet</span>
                 <ChevronRight size={14} className="text-muted-foreground" />
               </Link>
             )}
             {verAgenda && (
-              <Link href="/agenda" className="flex items-center gap-3 rounded-[8px] border border-border px-3 py-2.5 text-sm transition-colors hover:bg-muted">
-                <CalendarPlus size={16} className="text-primary" />
+              <Link href="/agenda" className="flex items-center gap-3 rounded-2xl bg-white/60 px-3 py-2.5 text-sm font-semibold transition-colors hover:bg-white">
+                <span className="flex size-8 items-center justify-center rounded-full bg-secondary text-primary"><CalendarPlus size={15} /></span>
                 <span className="flex-1">Marcar um banho</span>
                 <ChevronRight size={14} className="text-muted-foreground" />
               </Link>
             )}
             {verFinanceiro && (
-              <Link href="/financeiro" className="flex items-center gap-3 rounded-[8px] border border-border px-3 py-2.5 text-sm transition-colors hover:bg-muted">
-                <Receipt size={16} className="text-primary" />
+              <Link href="/financeiro" className="flex items-center gap-3 rounded-2xl bg-white/60 px-3 py-2.5 text-sm font-semibold transition-colors hover:bg-white">
+                <span className="flex size-8 items-center justify-center rounded-full bg-secondary text-primary"><Receipt size={15} /></span>
                 <span className="flex-1">Fechar o mês e enviar extratos</span>
                 <ChevronRight size={14} className="text-muted-foreground" />
               </Link>
             )}
-            <div className="mt-2 rounded-[8px] bg-primary/5 px-3 py-2.5 text-xs text-muted-foreground">
+            <div className="mt-2 rounded-2xl border border-[#ffc21a]/40 bg-[#ffc21a]/12 px-3.5 py-3 text-xs text-muted-foreground">
               <span className="font-medium text-foreground">Planos este mês:</span>{" "}
               {totais.atendimentosCobertos} de {totais.atendimentos} atendimentos realizados foram
               cobertos por plano.

@@ -17,9 +17,9 @@ export default function CadastroPage() {
 
   return (
     <AuthShell>
-      <div className="rounded-[12px] border border-border bg-white p-6 shadow-sm">
-        <h1 className="text-xl font-semibold">Criar conta do petshop</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
+      <div className="rounded-card glass p-7">
+        <h1 className="text-3xl font-extrabold tracking-tight">Criar conta do petshop</h1>
+        <p className="mt-1.5 text-[15px] font-medium text-muted-foreground">
           Leva um minuto. Depois é só conectar o WhatsApp e cadastrar os serviços.
         </p>
 
@@ -75,11 +75,11 @@ export default function CadastroPage() {
             className="absolute -left-[9999px] size-px opacity-0"
           />
           {state?.error && (
-            <p role="alert" className="rounded-[12px] bg-destructive/10 px-3 py-2 text-sm text-destructive">
+            <p role="alert" className="rounded-xl bg-destructive/10 px-3 py-2 text-sm text-destructive">
               {state.error}
             </p>
           )}
-          <Button type="submit" disabled={isPending} className="mt-1">
+          <Button type="submit" size="lg" disabled={isPending} className="mt-2">
             {isPending ? "Criando conta..." : "Criar conta"}
           </Button>
         </form>

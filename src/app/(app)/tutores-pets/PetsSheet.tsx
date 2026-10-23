@@ -68,7 +68,7 @@ function PetForm({
   return (
     <form
       onSubmit={onSubmit}
-      className="flex flex-col gap-3 rounded-[12px] border border-primary/30 bg-primary/5 p-3"
+      className="flex flex-col gap-3 rounded-xl border border-primary/30 bg-primary/5 p-3"
     >
       <div className="flex flex-col gap-1.5">
         <Label htmlFor="pet-nome">Nome</Label>
@@ -160,7 +160,7 @@ function PetForm({
         </div>
       )}
       {error && (
-        <p role="alert" className="rounded-[12px] bg-destructive/10 px-3 py-2 text-sm text-destructive">
+        <p role="alert" className="rounded-xl bg-destructive/10 px-3 py-2 text-sm text-destructive">
           {error}
         </p>
       )}
@@ -291,7 +291,7 @@ export function PetsSheet({
               ) : (
                 <div
                   key={pet.id}
-                  className="flex flex-col gap-2 rounded-[12px] border border-border p-3"
+                  className="flex flex-col gap-2 rounded-xl border border-border p-3"
                 >
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
@@ -311,7 +311,7 @@ export function PetsSheet({
                         </p>
                       )}
                       {pet.observacoes && (
-                        <p className="mt-1 rounded-[8px] bg-warning/10 px-2 py-1 text-xs text-warning-foreground">
+                        <p className="mt-1 rounded-lg bg-warning/10 px-2 py-1 text-xs text-warning-foreground">
                           {pet.observacoes}
                         </p>
                       )}

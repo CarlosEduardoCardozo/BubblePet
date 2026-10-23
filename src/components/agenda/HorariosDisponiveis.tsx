@@ -44,7 +44,7 @@ export function HorariosDisponiveis({
   const titulo = dia.setLocale("pt-BR").toFormat("ccc, dd/LL");
 
   return (
-    <div className="flex flex-col gap-3 rounded-[12px] border border-border bg-white p-3">
+    <div className="flex flex-col gap-3 rounded-card glass p-3">
       <div className="flex items-center justify-between gap-2">
         <span className="flex items-center gap-1.5 text-sm font-medium">
           <Clock size={14} className="text-muted-foreground" />
@@ -66,7 +66,7 @@ export function HorariosDisponiveis({
               key={horarioLivre.toISO()}
               type="button"
               onClick={() => onSelectSlot(horarioLivre.toJSDate())}
-              className="rounded-[8px] border border-input px-1.5 py-1 text-xs font-medium text-foreground transition-colors hover:border-primary hover:bg-primary/5 hover:text-primary"
+              className="rounded-lg border border-input px-1.5 py-1 text-xs font-medium text-foreground transition-colors hover:border-primary hover:bg-primary/5 hover:text-primary"
             >
               {horarioLivre.toFormat("HH:mm")}
             </button>

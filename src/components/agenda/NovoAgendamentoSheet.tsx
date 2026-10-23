@@ -349,7 +349,7 @@ export function NovoAgendamentoSheet({
 
           {/* Altura reservada: o bloco do plano não pode empurrar o form
               quando a resposta chega. */}
-          <div className="min-h-12 rounded-[12px] bg-primary/5 px-3 py-2 text-sm">
+          <div className="min-h-12 rounded-xl bg-primary/5 px-3 py-2 text-sm">
             {planoInfo === undefined ? (
               <p className="text-muted-foreground">
                 {petId && servicoId ? "Verificando plano do pet..." : "Escolha o pet e o serviço para ver se há plano."}
@@ -488,7 +488,7 @@ export function NovoAgendamentoSheet({
           </div>
 
           {servico && (
-            <div className="flex flex-col gap-1 rounded-[12px] border border-border px-3 py-2 text-sm">
+            <div className="flex flex-col gap-1 rounded-xl border border-border px-3 py-2 text-sm">
               <div className="flex justify-between">
                 <span className="text-muted-foreground">{servico.nome}</span>
                 <span>{usandoCredito ? "Plano" : formatCentavos(valorBase)}</span>
@@ -512,7 +512,7 @@ export function NovoAgendamentoSheet({
           </div>
 
           {whatsappConectado && (
-            <label className="flex items-start gap-2.5 rounded-[12px] border border-border px-3 py-2.5 text-sm">
+            <label className="flex items-start gap-2.5 rounded-xl border border-border px-3 py-2.5 text-sm">
               <input
                 type="checkbox"
                 checked={avisar}
@@ -530,7 +530,7 @@ export function NovoAgendamentoSheet({
           )}
 
           {error && (
-            <p role="alert" className="rounded-[12px] bg-destructive/10 px-3 py-2 text-sm text-destructive">
+            <p role="alert" className="rounded-xl bg-destructive/10 px-3 py-2 text-sm text-destructive">
               {error}
             </p>
           )}

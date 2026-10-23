@@ -209,7 +209,7 @@ export function WhatsappCard({
       <CardContent className="flex flex-col gap-4">
         {conectado ? (
           <div className="flex flex-col gap-3">
-            <div className="rounded-[12px] border border-border bg-muted/30 px-3 py-2 text-sm">
+            <div className="rounded-xl border border-border bg-white/50 px-3 py-2 text-sm">
               <div className="font-medium">{profileNome ?? "Perfil do WhatsApp"}</div>
               <div className="text-muted-foreground">
                 {numero ? formatPhoneBR(numero) : "número não informado"}
@@ -247,10 +247,10 @@ export function WhatsappCard({
                 alt="QR code para conectar o WhatsApp"
                 width={220}
                 height={220}
-                className="rounded-[12px] border border-border"
+                className="rounded-xl border border-border"
               />
             ) : (
-              <div className="flex size-[220px] items-center justify-center rounded-[12px] border border-dashed border-border text-sm text-muted-foreground">
+              <div className="flex size-[220px] items-center justify-center rounded-xl border border-dashed border-border text-sm text-muted-foreground">
                 Gerando QR code...
               </div>
             )}
@@ -269,7 +269,7 @@ export function WhatsappCard({
             <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
               Código de conexão
             </span>
-            <span className="select-all rounded-[12px] border border-border bg-muted/30 px-5 py-3 font-mono text-3xl font-semibold tracking-[0.2em]">
+            <span className="select-all rounded-xl border border-border bg-white/50 px-5 py-3 font-mono text-3xl font-semibold tracking-[0.2em]">
               {formatarCodigo(fase.paircode)}
             </span>
             <ol className="text-left text-xs text-muted-foreground">
@@ -345,7 +345,7 @@ export function WhatsappCard({
         )}
 
         {erro && (
-          <p role="alert" className="rounded-[12px] bg-destructive/10 px-3 py-2 text-sm text-destructive">
+          <p role="alert" className="rounded-xl bg-destructive/10 px-3 py-2 text-sm text-destructive">
             {erro}
           </p>
         )}
@@ -353,7 +353,7 @@ export function WhatsappCard({
         {mensagens.length > 0 && (
           <div className="flex flex-col gap-1.5">
             <span className="text-xs font-medium text-muted-foreground">Últimas mensagens</span>
-            <ul className="flex flex-col divide-y divide-border rounded-[12px] border border-border text-xs">
+            <ul className="flex flex-col divide-y divide-border rounded-xl border border-border text-xs">
               {mensagens.map((m) => (
                 <li key={m.id} className="flex items-center justify-between gap-2 px-2.5 py-1.5">
                   <div className="flex min-w-0 flex-col">

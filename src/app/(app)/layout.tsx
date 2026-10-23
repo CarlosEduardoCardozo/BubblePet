@@ -66,7 +66,7 @@ export default async function AppLayout({
   }
 
   return (
-    <div className="flex min-h-screen flex-col bg-gray-50">
+    <div className="flex min-h-screen flex-col">
       {suporte && <SuporteBanner usuario={suporte.alvoNome} petshop={suporte.petshopNome} />}
       <div className="flex min-h-0 flex-1">
         <Sidebar menu={menu} />
@@ -77,7 +77,7 @@ export default async function AppLayout({
             whatsappConectado={petshop?.whatsapp_status === "conectado"}
             menu={menu}
           />
-          <main className="flex-1 p-4 md:p-6">{children}</main>
+          <main className="flex-1 px-4 pt-2 pb-10 md:px-8 lg:pr-10 lg:pl-4">{children}</main>
         </div>
       </div>
     </div>

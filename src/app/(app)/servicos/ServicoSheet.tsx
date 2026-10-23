@@ -107,7 +107,7 @@ export function ServicoSheet({
               />
             </div>
           </div>
-          <div className="flex flex-col gap-2 rounded-[12px] border border-border p-3">
+          <div className="flex flex-col gap-2 rounded-xl border border-border p-3">
             <div className="flex flex-col gap-0.5">
               <span className="text-sm font-medium">Preço por porte</span>
               <span className="text-xs text-muted-foreground">
@@ -143,7 +143,7 @@ export function ServicoSheet({
           </div>
 
           {error && (
-            <p role="alert" className="rounded-[12px] bg-destructive/10 px-3 py-2 text-sm text-destructive">
+            <p role="alert" className="rounded-xl bg-destructive/10 px-3 py-2 text-sm text-destructive">
               {error}
             </p>
           )}

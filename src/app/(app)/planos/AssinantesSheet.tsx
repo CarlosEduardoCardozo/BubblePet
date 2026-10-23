@@ -141,8 +141,8 @@ export function AssinantesSheet({
           <div className="flex flex-col gap-2 overflow-y-auto px-4 pb-4">
             {estado.tipo === "carregando" && (
               <>
-                <Skeleton className="h-14 w-full rounded-[12px]" />
-                <Skeleton className="h-14 w-full rounded-[12px]" />
+                <Skeleton className="h-14 w-full rounded-xl" />
+                <Skeleton className="h-14 w-full rounded-xl" />
               </>
             )}
 
@@ -168,7 +168,7 @@ export function AssinantesSheet({
               estado.assinantes.map((assinante) => (
                 <div
                   key={assinante.assinaturaId}
-                  className="flex items-center justify-between gap-2 rounded-[12px] border border-border p-3"
+                  className="flex items-center justify-between gap-2 rounded-xl border border-border p-3"
                 >
                   <div className="min-w-0">
                     <p className="font-medium">{assinante.petNome}</p>

@@ -17,9 +17,9 @@ export default function LoginPage() {
 
   return (
     <AuthShell>
-      <div className="rounded-[12px] border border-border bg-white p-6 shadow-sm">
-        <h1 className="text-xl font-semibold">Entrar</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
+      <div className="rounded-card glass p-7">
+        <h1 className="text-3xl font-extrabold tracking-tight">Entrar</h1>
+        <p className="mt-1.5 text-[15px] font-medium text-muted-foreground">
           Use a conta do petshop para acessar o painel.
         </p>
 
@@ -60,12 +60,12 @@ export default function LoginPage() {
           {state?.error && (
             <p
               role="alert"
-              className="rounded-[12px] bg-destructive/10 px-3 py-2 text-sm text-destructive"
+              className="rounded-xl bg-destructive/10 px-3 py-2 text-sm text-destructive"
             >
               {state.error}
             </p>
           )}
-          <Button type="submit" disabled={isPending} className="mt-1">
+          <Button type="submit" size="lg" disabled={isPending} className="mt-2">
             {isPending ? "Entrando..." : "Entrar"}
           </Button>
         </form>

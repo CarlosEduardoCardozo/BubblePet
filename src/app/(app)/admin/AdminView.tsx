@@ -56,7 +56,7 @@ function relativo(iso: string | null): string {
 
 function Resumo({ rotulo, valor, destaque }: { rotulo: string; valor: number; destaque?: string }) {
   return (
-    <div className="flex flex-col gap-1 rounded-[12px] border border-border bg-white px-4 py-3">
+    <div className="flex flex-col gap-1 rounded-card glass px-4 py-3">
       <span className="text-xs text-muted-foreground">{rotulo}</span>
       <span className={cn("text-2xl font-semibold", destaque)}>{valor}</span>
     </div>
@@ -148,7 +148,7 @@ export function AdminView({ contas }: { contas: ContaAdmin[] }) {
 
       <div className="flex flex-col gap-3">
         {filtradas.length === 0 && (
-          <p className="rounded-[12px] border border-border bg-white py-8 text-center text-sm text-muted-foreground">
+          <p className="rounded-card glass py-8 text-center text-sm text-muted-foreground">
             Nenhuma conta encontrada.
           </p>
         )}
@@ -156,7 +156,7 @@ export function AdminView({ contas }: { contas: ContaAdmin[] }) {
           <div
             key={c.id}
             className={cn(
-              "flex flex-col gap-3 rounded-[12px] border border-border bg-white p-4",
+              "flex flex-col gap-3 rounded-card glass p-4",
               c.status === "congelado" && "bg-sky-50/60"
             )}
           >
@@ -207,7 +207,7 @@ export function AdminView({ contas }: { contas: ContaAdmin[] }) {
               <div><div className="text-xs text-muted-foreground">WhatsApp 30 dias</div>{c.mensagens30d} msgs</div>
             </div>
 
-            <div className="flex flex-col divide-y divide-border rounded-[10px] border border-border">
+            <div className="flex flex-col divide-y divide-border rounded-lg border border-border">
               {c.usuarios.map((u) => (
                 <div key={u.id} className={cn("flex flex-wrap items-center gap-2 px-3 py-2", !u.ativo && "opacity-60")}>
                   <div className="flex min-w-0 flex-1 flex-col">
