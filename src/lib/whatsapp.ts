@@ -17,7 +17,9 @@ export type TipoMensagem =
   | "confirmacao"
   | "otp"
   | "fechamento"
-  | "relatorio";
+  | "relatorio"
+  | "retorno"
+  | "plano_sobrando";
 
 export type ResultadoEnvio = { ok: true } | { ok: false; erro: string };
 

@@ -7,6 +7,7 @@ import {
   Landmark,
   Settings,
   ShieldCheck,
+  TrendingUp,
   UserCog,
 } from "lucide-react";
 import type { Modulo } from "@/lib/permissoes";
@@ -18,6 +19,7 @@ export const NAV_ITEMS = [
   { href: "/dashboard", label: "Início", icon: LayoutDashboard },
   { href: "/agenda", label: "Agenda", icon: CalendarDays },
   { href: "/tutores-pets", label: "Clientes e pets", icon: Users },
+  { href: "/oportunidades", label: "Oportunidades", icon: TrendingUp },
   { href: "/planos", label: "Planos", icon: Wallet },
   { href: "/servicos", label: "Serviços", icon: Scissors },
   { href: "/financeiro", label: "Financeiro", icon: Landmark },

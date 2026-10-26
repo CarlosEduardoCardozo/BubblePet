@@ -244,3 +244,37 @@ export function templateRelatorio(args: {
   const mes = DateTime.fromISO(args.competencia).setLocale("pt-BR").toFormat("LLLL 'de' yyyy");
   return `📊 *Relatório de ${mes}* — ${args.petshopNome}\n\n• Movimento do mês: *${formatCentavos(args.faturamentoCentavos)}*\n• Atendimentos realizados: *${args.atendimentos}*\n• Planos ativos: *${args.planosAtivos}*\n\nO PDF completo segue em anexo.`;
 }
+
+export function templateRetorno(args: {
+  petshop: Petshop;
+  tutorNome: string;
+  petNome: string;
+  servicoNome: string;
+  dias: number;
+  linkAgendar: string;
+}): string {
+  return renderizarModelo(textoDoModelo("retorno", args.petshop.modelos), {
+    ...base(args.petshop, args.tutorNome),
+    pet: args.petNome,
+    servico: args.servicoNome.toLowerCase(),
+    dias: String(args.dias),
+    link_agendar: args.linkAgendar,
+  });
+}
+
+export function templatePlanoSobrando(args: {
+  petshop: Petshop;
+  tutorNome: string;
+  petNome: string;
+  planoNome: string;
+  saldo: number;
+  linkAgendar: string;
+}): string {
+  return renderizarModelo(textoDoModelo("plano_sobrando", args.petshop.modelos), {
+    ...base(args.petshop, args.tutorNome),
+    pet: args.petNome,
+    plano: args.planoNome,
+    saldo: String(args.saldo),
+    link_agendar: args.linkAgendar,
+  });
+}

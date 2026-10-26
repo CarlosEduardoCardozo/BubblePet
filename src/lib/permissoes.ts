@@ -19,7 +19,12 @@ export const PERFIS_PRONTOS: { nome: string; modulos: Modulo[] }[] = [
 ];
 
 /** Módulo que protege uma rota do painel (null = liberada pra todos). */
+/** Telas que não são um módulo próprio, mas ficam com o acesso de um. */
+const ROTAS_DE_MODULO: { href: string; modulo: Modulo }[] = [{ href: "/oportunidades", modulo: "clientes" }];
+
 export function moduloDaRota(pathname: string): Modulo | null {
+  const extra = ROTAS_DE_MODULO.find((r) => pathname === r.href || pathname.startsWith(`${r.href}/`));
+  if (extra) return extra.modulo;
   return MODULOS.find((m) => pathname === m.href || pathname.startsWith(`${m.href}/`))?.valor ?? null;
 }
 

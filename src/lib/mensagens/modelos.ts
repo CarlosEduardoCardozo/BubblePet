@@ -9,7 +9,9 @@ export type TipoModelo =
   | "lembrete"
   | "resposta_confirmado"
   | "resposta_cancelado"
-  | "fechamento";
+  | "fechamento"
+  | "retorno"
+  | "plano_sobrando";
 
 export type Variavel = { chave: string; descricao: string; exemplo: string };
 
@@ -93,6 +95,31 @@ export const MODELOS: Record<TipoModelo, DefinicaoModelo> = {
     padrao:
       "{saudacao}, {tutor}! 🐾\n\nSegue o fechamento de *{petshop}*:\n\n{detalhes}\n\n{resumo}\n*Total: {total}*\n\n{pix}\n\nO extrato em PDF vai logo abaixo. Obrigado pela confiança! 💚",
     obrigatorias: ["total"],
+  },
+  retorno: {
+    titulo: "Retorno do cliente",
+    quando: "Automático, em Oportunidades: quando chega a hora do pet voltar, pelo ritmo de visitas dele. Também pelo botão Enviar agora.",
+    variaveis: [
+      V.saudacao, V.tutor, V.petshop, V.pet, V.servico,
+      { chave: "dias", descricao: "Dias desde a última visita", exemplo: "32" },
+      { chave: "link_agendar", descricao: "Link pra marcar o horário", exemplo: "https://bubblepets.vercel.app/agendar/petshop" },
+    ],
+    padrao:
+      "{saudacao}, {tutor}! 🐾\n\nJá faz {dias} dias do último {servico} do *{pet}*. Que tal deixar ele cheiroso de novo?\n\nÉ só escolher o horário aqui: {link_agendar}\n\nOu responda esta mensagem que a gente marca pra você. 💜",
+    obrigatorias: ["pet"],
+  },
+  plano_sobrando: {
+    titulo: "Banho do plano sobrando",
+    quando: "Automático, nos últimos dias do mês, pra quem ainda tem banho do plano e não marcou (créditos que não acumulam).",
+    variaveis: [
+      V.saudacao, V.tutor, V.petshop, V.pet,
+      { chave: "plano", descricao: "Nome do plano", exemplo: "Plano Básico" },
+      { chave: "saldo", descricao: "Banhos que sobraram no mês", exemplo: "2" },
+      { chave: "link_agendar", descricao: "Link pra marcar o horário", exemplo: "https://bubblepets.vercel.app/agendar/petshop" },
+    ],
+    padrao:
+      "{saudacao}, {tutor}! 🐾\n\nO *{plano}* do *{pet}* ainda tem *{saldo}* banho(s) este mês, e eles não passam pro mês que vem. Bora aproveitar?\n\nEscolha o horário: {link_agendar}",
+    obrigatorias: ["saldo"],
   },
 };
 
