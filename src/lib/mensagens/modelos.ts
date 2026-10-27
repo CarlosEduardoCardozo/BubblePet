@@ -11,7 +11,8 @@ export type TipoModelo =
   | "resposta_cancelado"
   | "fechamento"
   | "retorno"
-  | "plano_sobrando";
+  | "plano_sobrando"
+  | "pet_pronto";
 
 export type Variavel = { chave: string; descricao: string; exemplo: string };
 
@@ -120,6 +121,14 @@ export const MODELOS: Record<TipoModelo, DefinicaoModelo> = {
     padrao:
       "{saudacao}, {tutor}! 🐾\n\nO *{plano}* do *{pet}* ainda tem *{saldo}* banho(s) este mês, e eles não passam pro mês que vem. Bora aproveitar?\n\nEscolha o horário: {link_agendar}",
     obrigatorias: ["saldo"],
+  },
+  pet_pronto: {
+    titulo: "Pet pronto para buscar",
+    quando: "No Painel do dia, quando o atendimento passa para Pronto.",
+    variaveis: [V.saudacao, V.tutor, V.petshop, V.pet, V.servico, V.endereco],
+    padrao:
+      "{saudacao}, {tutor}! 🐾\n\nO *{pet}* está prontinho e cheiroso esperando você aqui no *{petshop}*. 💜\n\nPode vir buscar quando quiser!\n{endereco}",
+    obrigatorias: ["pet"],
   },
 };
 

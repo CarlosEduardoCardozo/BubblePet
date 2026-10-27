@@ -7,6 +7,7 @@ import {
   Landmark,
   Settings,
   ShieldCheck,
+  ClipboardList,
   TrendingUp,
   UserCog,
 } from "lucide-react";
@@ -17,6 +18,7 @@ export type MenuAcesso = { admin: boolean; dono: boolean; modulos: Modulo[] };
 
 export const NAV_ITEMS = [
   { href: "/dashboard", label: "Início", icon: LayoutDashboard },
+  { href: "/hoje", label: "Hoje", icon: ClipboardList },
   { href: "/agenda", label: "Agenda", icon: CalendarDays },
   { href: "/tutores-pets", label: "Clientes e pets", icon: Users },
   { href: "/oportunidades", label: "Oportunidades", icon: TrendingUp },

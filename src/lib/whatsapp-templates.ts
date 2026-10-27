@@ -278,3 +278,16 @@ export function templatePlanoSobrando(args: {
     link_agendar: args.linkAgendar,
   });
 }
+
+export function templatePetPronto(args: {
+  petshop: Petshop;
+  tutorNome: string;
+  petNome: string;
+  servicoNome: string;
+}): string {
+  return renderizarModelo(textoDoModelo("pet_pronto", args.petshop.modelos), {
+    ...base(args.petshop, args.tutorNome),
+    pet: args.petNome,
+    servico: args.servicoNome.toLowerCase(),
+  });
+}

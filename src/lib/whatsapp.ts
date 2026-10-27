@@ -19,7 +19,8 @@ export type TipoMensagem =
   | "fechamento"
   | "relatorio"
   | "retorno"
-  | "plano_sobrando";
+  | "plano_sobrando"
+  | "pet_pronto";
 
 export type ResultadoEnvio = { ok: true } | { ok: false; erro: string };
 

@@ -3,7 +3,7 @@
 import { useEffect, useState, useTransition } from "react";
 import { DateTime } from "luxon";
 import { toast } from "sonner";
-import { Plus } from "lucide-react";
+import { Plus, Sparkles } from "lucide-react";
 import {
   Sheet,
   SheetContent,
@@ -25,6 +25,7 @@ import {
   calcularHorariosLivres,
   diaAberto,
   horarioCabe,
+  proximosDiasAbertos,
   ZONE,
   type HorarioFuncionamento,
   type Ocupado,
@@ -90,6 +91,9 @@ export function NovoAgendamentoSheet({
   // Pets cadastrados aqui aparecem na hora, antes da página recarregar os dados.
   const [petsNovos, setPetsNovos] = useState<PetOption[]>([]);
   const [tutoresNovos, setTutoresNovos] = useState<TutorOption[]>([]);
+  // Último atendimento do pet escolhido (pra repetir o serviço).
+  const [ultimo, setUltimo] = useState<{ servicoNome: string; data: string } | null>(null);
+  const [buscandoHorario, setBuscandoHorario] = useState(false);
 
   const todosPets = [...pets, ...petsNovos.filter((n) => !pets.some((p) => p.id === n.id))];
   const todosTutores = [
@@ -186,6 +190,76 @@ export function NovoAgendamentoSheet({
     };
   }, [petId, servicoId, data]);
 
+  // Escolheu o pet: traz o serviço da última vez (se nenhum foi escolhido ainda).
+  useEffect(() => {
+    if (!petId) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- limpa a sugestão do pet anterior
+      setUltimo(null);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      const supabase = createClient();
+      const { data: rows } = await supabase
+        .from("agendamentos")
+        .select("servico_id, inicio, servicos(nome)")
+        .eq("pet_id", petId)
+        .neq("status", "cancelado")
+        .lt("inicio", new Date().toISOString())
+        .order("inicio", { ascending: false })
+        .limit(1);
+      const row = rows?.[0];
+      if (cancelled) return;
+      if (!row) {
+        setUltimo(null);
+        return;
+      }
+      const nome = (row.servicos as unknown as { nome: string } | null)?.nome ?? "";
+      setUltimo({ servicoNome: nome, data: DateTime.fromISO(row.inicio).setZone(ZONE).toFormat("dd/LL") });
+      if (servicos.some((s) => s.id === row.servico_id)) {
+        setServicoId((atual) => atual || row.servico_id);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [petId, servicos]);
+
+  /** Acha o primeiro horário livre a partir de agora (até 3 semanas), pelo serviço escolhido. */
+  async function proximoHorarioLivre() {
+    setBuscandoHorario(true);
+    const agora = DateTime.now().setZone(ZONE);
+    const dias = proximosDiasAbertos(horario, 18, agora);
+    const ate = agora.plus({ days: 22 }).endOf("day");
+    const supabase = createClient();
+    const { data: rows } = await supabase
+      .from("agendamentos")
+      .select("id, inicio, fim")
+      .gte("inicio", agora.startOf("day").toUTC().toISO()!)
+      .lt("inicio", ate.toUTC().toISO()!)
+      .not("status", "in", "(cancelado,faltou)");
+    const ocupadosFuturos = (rows ?? []).map((r) => ({ id: r.id, inicio: r.inicio, fim: r.fim }));
+    setBuscandoHorario(false);
+    for (const dia of dias) {
+      const livres = calcularHorariosLivres({
+        dataISO: dia,
+        duracaoMin: duracao,
+        ocupados: ocupadosFuturos,
+        horario,
+        agora,
+        stepMin: 30,
+        antecedenciaMin: 30,
+      });
+      if (livres.length) {
+        setData(dia);
+        setHora(livres[0].toFormat("HH:mm"));
+        toast.success(`Próximo horário livre: ${livres[0].setLocale("pt-BR").toFormat("cccc, dd/LL 'às' HH:mm")}.`);
+        return;
+      }
+    }
+    toast.error("Nenhum horário livre nas próximas 3 semanas para esse serviço.");
+  }
+
   function handleOpenChange(next: boolean) {
     if (!next) {
       setError(null);
@@ -199,6 +273,7 @@ export function NovoAgendamentoSheet({
       setCadastro(null);
       setRepetir("nao");
       setVezes("4");
+      setUltimo(null);
     }
     onOpenChange(next);
   }
@@ -346,6 +421,11 @@ export function NovoAgendamentoSheet({
                 }`,
               }))}
             />
+            {ultimo && (
+              <p className="text-xs text-muted-foreground">
+                Último: <span className="font-medium text-foreground">{ultimo.servicoNome}</span> em {ultimo.data}
+              </p>
+            )}
           </div>
 
           {/* Altura reservada: o bloco do plano não pode empurrar o form
@@ -382,7 +462,17 @@ export function NovoAgendamentoSheet({
 
           <div className="grid grid-cols-2 gap-3">
             <div className="flex flex-col gap-1.5">
-              <Label htmlFor="data">Data</Label>
+              <div className="flex items-center justify-between gap-2">
+                <Label htmlFor="data">Data</Label>
+                <button
+                  type="button"
+                  onClick={proximoHorarioLivre}
+                  disabled={buscandoHorario}
+                  className="flex items-center gap-1 text-xs font-semibold text-primary hover:underline disabled:opacity-50"
+                >
+                  <Sparkles size={12} /> {buscandoHorario ? "Procurando..." : "Próximo livre"}
+                </button>
+              </div>
               <Input
                 id="data"
                 type="date"
