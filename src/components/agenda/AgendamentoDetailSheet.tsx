@@ -35,6 +35,7 @@ import {
   type Ocupado,
 } from "@/lib/agenda/slots";
 import { LembreteButton } from "./LembreteButton";
+import { FidelidadeBloco } from "./FidelidadeBloco";
 import {
   AdicionaisEditor,
   adicionaisDasLinhas,
@@ -258,6 +259,10 @@ export function AgendamentoDetailSheet({
                   </>
                 )}
               </div>
+
+              {dados.status !== "cancelado" && dados.status !== "faltou" && (
+                <FidelidadeBloco key={dados.id} agendamentoId={dados.id} onChanged={onChanged} />
+              )}
 
               {editandoExtras ? (
                 <div className="flex flex-col gap-2 rounded-xl border border-border p-3">

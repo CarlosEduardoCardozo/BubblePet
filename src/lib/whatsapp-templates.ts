@@ -284,10 +284,28 @@ export function templatePetPronto(args: {
   tutorNome: string;
   petNome: string;
   servicoNome: string;
+  /** Linha do cartão fidelidade ("" = programa desligado). */
+  fidelidade?: string;
 }): string {
   return renderizarModelo(textoDoModelo("pet_pronto", args.petshop.modelos), {
     ...base(args.petshop, args.tutorNome),
     pet: args.petNome,
     servico: args.servicoNome.toLowerCase(),
+    fidelidade: args.fidelidade ?? "",
+  });
+}
+
+export function templateFidelidade(args: {
+  petshop: Petshop;
+  tutorNome: string;
+  premio: string;
+  meta: number;
+  linkAgendar: string;
+}): string {
+  return renderizarModelo(textoDoModelo("fidelidade", args.petshop.modelos), {
+    ...base(args.petshop, args.tutorNome),
+    premio: args.premio,
+    meta: String(args.meta),
+    link_agendar: args.linkAgendar,
   });
 }

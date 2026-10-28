@@ -22,13 +22,14 @@ function um<T>(v: Um<T>): T | undefined {
 }
 
 const SELECT_AGENDAMENTO =
-  "id, inicio, valor_centavos, origem_plano, adicionais, pets(id, nome, tutor_id), servicos(nome, preco_centavos), assinaturas(planos(nome, creditos_mes))";
+  "id, inicio, valor_centavos, origem_plano, fidelidade_resgate, adicionais, pets(id, nome, tutor_id), servicos(nome, preco_centavos), assinaturas(planos(nome, creditos_mes))";
 
 type LinhaAgendamento = {
   id: string;
   inicio: string;
   valor_centavos: number | null;
   origem_plano: boolean;
+  fidelidade_resgate?: boolean | null;
   adicionais: Adicional[] | null;
   pets: unknown;
   servicos: unknown;
@@ -47,6 +48,7 @@ function paraAgendamentos(rows: LinhaAgendamento[] | null): AgendamentoConcluido
       inicio: row.inicio,
       valor_centavos: row.valor_centavos,
       origem_plano: row.origem_plano,
+      fidelidade_resgate: row.fidelidade_resgate ?? false,
       adicionais: row.adicionais ?? [],
       pet,
       servico,

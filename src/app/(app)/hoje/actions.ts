@@ -8,6 +8,8 @@ import { mensagemErroBanco } from "@/lib/db-errors";
 import { enviarMensagemWhatsapp } from "@/lib/whatsapp";
 import { templatePetPronto } from "@/lib/whatsapp-templates";
 import { lerEtapa, type Etapa } from "@/lib/painel-dia";
+import { cartaoDoTutor } from "@/lib/fidelidade-carregar";
+import { frasePrograma } from "@/lib/fidelidade";
 
 type Um<T> = T | T[] | null | undefined;
 function um<T>(v: Um<T>): T | undefined {
@@ -63,6 +65,10 @@ export async function mudarEtapa(id: string, etapaRaw: Etapa | null, avisarTutor
         .single();
       if (petshop?.whatsapp_status !== "conectado" || !tutor) aviso = "whatsapp_off";
       else {
+        // O cartão fidelidade vai junto; se a conta falhar, a mensagem sai sem ele.
+        const fidelidade = await cartaoDoTutor(supabase, petshopId, tutor.id)
+          .then(({ config, cartao }) => frasePrograma(config, cartao))
+          .catch(() => "");
         const r = await enviarMensagemWhatsapp({
           petshopId,
           tutorId: tutor.id,
@@ -73,6 +79,7 @@ export async function mudarEtapa(id: string, etapaRaw: Etapa | null, avisarTutor
             tutorNome: tutor.nome,
             petNome: pet?.nome ?? "seu pet",
             servicoNome: servico?.nome ?? "banho",
+            fidelidade,
           }),
         });
         if (r.ok) {

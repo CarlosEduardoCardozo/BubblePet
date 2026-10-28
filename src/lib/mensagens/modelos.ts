@@ -12,7 +12,8 @@ export type TipoModelo =
   | "fechamento"
   | "retorno"
   | "plano_sobrando"
-  | "pet_pronto";
+  | "pet_pronto"
+  | "fidelidade";
 
 export type Variavel = { chave: string; descricao: string; exemplo: string };
 
@@ -125,10 +126,30 @@ export const MODELOS: Record<TipoModelo, DefinicaoModelo> = {
   pet_pronto: {
     titulo: "Pet pronto para buscar",
     quando: "No Painel do dia, quando o atendimento passa para Pronto.",
-    variaveis: [V.saudacao, V.tutor, V.petshop, V.pet, V.servico, V.endereco],
+    variaveis: [
+      V.saudacao, V.tutor, V.petshop, V.pet, V.servico, V.endereco,
+      {
+        chave: "fidelidade",
+        descricao: "Como está o cartão fidelidade (some se o programa estiver desligado)",
+        exemplo: "🐾 Cartão fidelidade: 7 de 10. Faltam 3 para ganhar *Banho grátis*.",
+      },
+    ],
     padrao:
-      "{saudacao}, {tutor}! 🐾\n\nO *{pet}* está prontinho e cheiroso esperando você aqui no *{petshop}*. 💜\n\nPode vir buscar quando quiser!\n{endereco}",
+      "{saudacao}, {tutor}! 🐾\n\nO *{pet}* está prontinho e cheiroso esperando você aqui no *{petshop}*. 💜\n\nPode vir buscar quando quiser!\n{endereco}\n\n{fidelidade}",
     obrigatorias: ["pet"],
+  },
+  fidelidade: {
+    titulo: "Prêmio do cartão fidelidade",
+    quando: "Automático, quando o cliente completa o cartão fidelidade (programa ligado em Fidelidade).",
+    variaveis: [
+      V.saudacao, V.tutor, V.petshop,
+      { chave: "premio", descricao: "O prêmio do programa", exemplo: "Banho grátis" },
+      { chave: "meta", descricao: "Atendimentos para ganhar", exemplo: "10" },
+      { chave: "link_agendar", descricao: "Link pra marcar o horário", exemplo: "https://bubblepets.vercel.app/agendar/petshop" },
+    ],
+    padrao:
+      "{saudacao}, {tutor}! 🎉\n\nVocê completou {meta} atendimentos aqui no *{petshop}* e ganhou: *{premio}*! 🎁\n\nÉ só avisar no próximo atendimento. Pra marcar: {link_agendar}\n\nObrigado por confiar na gente! 💜",
+    obrigatorias: ["premio"],
   },
 };
 

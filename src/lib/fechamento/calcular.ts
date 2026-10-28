@@ -26,6 +26,8 @@ export type AgendamentoConcluido = {
   valor_centavos: number | null;
   origem_plano: boolean;
   adicionais?: Adicional[] | null;
+  /** Prêmio do cartão fidelidade usado neste atendimento. */
+  fidelidade_resgate?: boolean;
   pet: { id: string; nome: string; tutor_id: string };
   servico: { nome: string; preco_centavos: number };
   /** Plano que cobriu o atendimento (só quando origem_plano). */
@@ -129,7 +131,7 @@ export function calcularFechamentos(input: {
     const valor = ag.origem_plano ? 0 : (ag.valor_centavos ?? ag.servico.preco_centavos);
     push(ag.pet.tutor_id, {
       tipo: "servico",
-      descricao: ag.servico.nome,
+      descricao: ag.fidelidade_resgate ? `${ag.servico.nome} (prêmio fidelidade)` : ag.servico.nome,
       petNome: ag.pet.nome,
       data: ag.inicio,
       valorCentavos: valor,

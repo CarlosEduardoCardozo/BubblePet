@@ -258,10 +258,13 @@ export async function updateAgendamento(
 
   const { data: atual } = await supabase
     .from("agendamentos")
-    .select("id, pet_id, servico_id, origem_plano, status, valor_centavos")
+    .select("id, pet_id, servico_id, origem_plano, status, valor_centavos, fidelidade_resgate")
     .eq("id", id)
     .maybeSingle();
   if (!atual) return { error: "Agendamento não encontrado." };
+  if (atual.fidelidade_resgate && dados.servicoId !== atual.servico_id) {
+    return { error: "Esse atendimento usa o prêmio fidelidade. Desfaça o prêmio antes de trocar o serviço." };
+  }
   if (atual.status === "concluido" || atual.status === "cancelado") {
     return { error: "Agendamento encerrado não pode ser alterado." };
   }

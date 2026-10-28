@@ -23,6 +23,7 @@ export const PERFIS_PRONTOS: { nome: string; modulos: Modulo[] }[] = [
 /** Telas que não são um módulo próprio, mas ficam com o acesso de um. */
 const ROTAS_DE_MODULO: { href: string; modulo: Modulo }[] = [
   { href: "/oportunidades", modulo: "clientes" },
+  { href: "/fidelidade", modulo: "clientes" },
   { href: "/hoje", modulo: "agenda" },
 ];
 

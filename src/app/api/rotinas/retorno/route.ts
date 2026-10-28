@@ -1,6 +1,7 @@
 import { timingSafeEqual } from "node:crypto";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { executarRotinaRetorno } from "@/lib/retorno/enviar";
+import { executarAvisosFidelidade } from "@/lib/fidelidade-avisos";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -15,7 +16,7 @@ function igual(a: string, b: string): boolean {
 /**
  * Chamado a cada 5 minutos pelo pg_cron do banco (função
  * chamar_rotina_retorno). O segredo vive em `sistema_rotinas`, que só o
- * service role lê.
+ * service role lê. Também avisa quem ganhou prêmio no cartão fidelidade.
  */
 export async function POST(request: Request) {
   const recebido = request.headers.get("x-rotina-segredo") ?? "";
@@ -25,5 +26,6 @@ export async function POST(request: Request) {
   }
 
   const resumo = await executarRotinaRetorno();
-  return Response.json(resumo);
+  const fidelidade = await executarAvisosFidelidade();
+  return Response.json({ ...resumo, fidelidade });
 }
