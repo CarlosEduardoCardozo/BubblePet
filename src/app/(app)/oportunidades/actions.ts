@@ -6,7 +6,7 @@ import { semPermissao } from "@/lib/acesso";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentPetshopId } from "@/lib/supabase/petshop";
 import { mensagemErroBanco } from "@/lib/db-errors";
-import { enviarAgora } from "@/lib/retorno/enviar";
+import { enviarAgora, previaMensagem } from "@/lib/retorno/enviar";
 
 type ActionResult = { error: string } | { success: true };
 
@@ -23,6 +23,13 @@ const configSchema = z
     reenviar_apos_dias: z.coerce.number().int().min(7).max(90),
     avisar_plano_sobrando: z.boolean(),
     dias_fim_mes: z.coerce.number().int().min(3).max(20),
+    usar_ia: z.boolean(),
+    tom_ia: z
+      .string()
+      .trim()
+      .max(300, "Descreva o tom em até 300 caracteres.")
+      .transform((t) => t || null)
+      .nullable(),
   })
   .refine((c) => c.janela_fim > c.janela_inicio, { message: "O fim da janela tem que ser depois do início." });
 
@@ -37,6 +44,8 @@ export type ConfigForm = {
   reenviar_apos_dias: Numero;
   avisar_plano_sobrando: boolean;
   dias_fim_mes: Numero;
+  usar_ia: boolean;
+  tom_ia: string | null;
 };
 
 export async function salvarConfigRetorno(form: ConfigForm): Promise<ActionResult> {
@@ -85,13 +94,17 @@ async function cancelarPendentes(
 
 export async function enviarAgoraAction(
   petId: string,
-  tipo: "retorno" | "plano_sobrando"
+  tipo: "retorno" | "plano_sobrando",
+  texto: string
 ): Promise<ActionResult> {
   const bloqueio = await semPermissao("clientes");
   if (bloqueio) return bloqueio;
+  const limpo = texto.trim();
+  if (limpo.length < 10) return { error: "Escreva a mensagem antes de enviar." };
+  if (limpo.length > 2000) return { error: "A mensagem passou de 2000 caracteres." };
   const supabase = await createClient();
   const petshopId = await getCurrentPetshopId(supabase);
-  const r = await enviarAgora(supabase, petshopId, petId, tipo);
+  const r = await enviarAgora(supabase, petshopId, petId, tipo, limpo);
   revalidatePath("/oportunidades");
   return r.ok ? { success: true } : { error: r.erro };
 }
@@ -112,4 +125,18 @@ export async function pausarRetornoPet(petId: string, pausado: boolean): Promise
   }
   revalidatePath("/oportunidades");
   return { success: true };
+}
+
+/** Texto da mensagem antes de enviar: padrão ou escrito pela IA. */
+export async function previaMensagemAction(
+  petId: string,
+  tipo: "retorno" | "plano_sobrando",
+  comIa: boolean
+): Promise<{ error: string } | { texto: string; porIa: boolean; erroIa?: string }> {
+  const bloqueio = await semPermissao("clientes");
+  if (bloqueio) return bloqueio;
+  const supabase = await createClient();
+  const petshopId = await getCurrentPetshopId(supabase);
+  const r = await previaMensagem(supabase, petshopId, petId, tipo, comIa);
+  return "erro" in r ? { error: r.erro } : r;
 }

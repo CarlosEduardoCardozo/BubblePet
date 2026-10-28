@@ -22,7 +22,8 @@ import { EmptyState } from "@/components/shared/EmptyState";
 import { formatCentavos } from "@/lib/currency";
 import { cn } from "@/lib/utils";
 import type { RetornoConfig } from "@/lib/retorno/calcular";
-import { alternarRetornoAutomatico, enviarAgoraAction, pausarRetornoPet } from "./actions";
+import { alternarRetornoAutomatico, pausarRetornoPet } from "./actions";
+import { EnviarMensagemDialog, type AlvoMensagem } from "./EnviarMensagemDialog";
 import { ConfigRetornoSheet } from "./ConfigRetornoSheet";
 
 const ZONE = "America/Sao_Paulo";
@@ -103,16 +104,19 @@ export function OportunidadesView({
   config,
   whatsappConectado,
   voltaram,
+  iaDisponivel,
 }: {
   linhas: Linha[];
   config: RetornoConfig;
   whatsappConectado: boolean;
+  iaDisponivel: boolean;
   voltaram: { petId: string; petNome: string; enviadaEm: string; agendadoEm: string; valorCentavos: number }[];
 }) {
   const [aba, setAba] = useState<Grupo>("hora_de_voltar");
   const [configAberta, setConfigAberta] = useState(false);
   const [pendente, startTransition] = useTransition();
-  const [ocupado, setOcupado] = useState<string | null>(null);
+  const [, setOcupado] = useState<string | null>(null);
+  const [alvo, setAlvo] = useState<AlvoMensagem | null>(null);
 
   const porGrupo = (g: Grupo) => linhas.filter((l) => l.grupo === g);
   const naHora = porGrupo("hora_de_voltar");
@@ -136,13 +140,7 @@ export function OportunidadesView({
   }
 
   function enviar(l: Linha) {
-    setOcupado(l.petId);
-    startTransition(async () => {
-      const r = await enviarAgoraAction(l.petId, l.grupo === "plano_sobrando" ? "plano_sobrando" : "retorno");
-      setOcupado(null);
-      if ("error" in r) toast.error(r.error);
-      else toast.success(`Mensagem enviada para o tutor do ${l.petNome}.`);
-    });
+    setAlvo({ petId: l.petId, petNome: l.petNome, tutorNome: l.tutorNome, tipo: l.grupo === "plano_sobrando" ? "plano_sobrando" : "retorno" });
   }
 
   function pausar(l: Linha) {
@@ -266,8 +264,8 @@ export function OportunidadesView({
                 </div>
                 <div className="flex shrink-0 flex-wrap gap-2">
                   {l.grupo !== "agendado" && (
-                    <Button size="sm" onClick={() => enviar(l)} disabled={pendente || !whatsappConectado}>
-                      <Send size={14} /> {ocupado === l.petId ? "Enviando..." : "Enviar agora"}
+                    <Button size="sm" onClick={() => enviar(l)} disabled={pendente}>
+                      <Send size={14} /> Enviar agora
                     </Button>
                   )}
                   <Button size="sm" variant="outline" nativeButton={false} render={<Link href="/agenda" />}>
@@ -283,7 +281,8 @@ export function OportunidadesView({
         </div>
       )}
 
-      <ConfigRetornoSheet open={configAberta} onOpenChange={setConfigAberta} config={config} />
+      <ConfigRetornoSheet open={configAberta} onOpenChange={setConfigAberta} config={config} iaDisponivel={iaDisponivel} />
+      <EnviarMensagemDialog alvo={alvo} onClose={() => setAlvo(null)} iaDisponivel={iaDisponivel} iaPadrao={config.usar_ia} whatsappConectado={whatsappConectado} />
     </div>
   );
 }

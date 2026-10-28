@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Textarea } from "@/components/ui/textarea";
 import type { RetornoConfig } from "@/lib/retorno/calcular";
 import { salvarConfigRetorno, type ConfigForm } from "./actions";
 
@@ -40,10 +41,12 @@ export function ConfigRetornoSheet({
   open,
   onOpenChange,
   config,
+  iaDisponivel,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   config: RetornoConfig;
+  iaDisponivel: boolean;
 }) {
   const [form, setForm] = useState<ConfigForm>({ ...config });
   const [isPending, startTransition] = useTransition();
@@ -138,6 +141,33 @@ export function ConfigRetornoSheet({
               value={form.dias_fim_mes}
               onChange={set("dias_fim_mes")}
             />
+          </div>
+          <div className="flex flex-col gap-3 rounded-2xl border border-border bg-white/50 p-4">
+            <Label className="flex items-start gap-2.5 font-normal">
+              <Checkbox
+                checked={form.usar_ia}
+                disabled={!iaDisponivel}
+                onCheckedChange={(v) => setForm((f) => ({ ...f, usar_ia: v === true }))}
+              />
+              <span className="text-sm">
+                ✨ A IA escreve cada mensagem automática, personalizada pelo histórico do pet
+                {!iaDisponivel && <span className="block text-xs text-muted-foreground">Falta configurar a chave da OpenAI no servidor.</span>}
+              </span>
+            </Label>
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="tom_ia">Tom de voz do petshop</Label>
+              <Textarea
+                id="tom_ia"
+                value={form.tom_ia ?? ""}
+                onChange={(e) => setForm((f) => ({ ...f, tom_ia: e.target.value }))}
+                placeholder="Ex.: carinhoso e descontraído, chama os pets de bebês, sem formalidade"
+                className="min-h-20"
+                maxLength={300}
+              />
+              <p className="text-xs text-muted-foreground">
+                Se a IA falhar, a mensagem sai com o texto padrão. Ela nunca inventa preço ou promoção.
+              </p>
+            </div>
           </div>
           <SheetFooter className="flex-row justify-end px-0">
             <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>

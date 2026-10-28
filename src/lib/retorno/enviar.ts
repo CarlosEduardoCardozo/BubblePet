@@ -8,6 +8,8 @@ import { enviarMensagemWhatsapp, type ResultadoEnvio } from "@/lib/whatsapp";
 import { templatePlanoSobrando, templateRetorno } from "@/lib/whatsapp-templates";
 import { dentroDaJanela, horariosDaFila, ZONE, type PlanoSobrando, type Retorno } from "./calcular";
 import { carregarRetornos, type DadosRetorno } from "./carregar";
+import { iaDisponivel, IaIndisponivel } from "@/lib/ia/openai";
+import { escreverMensagemIa } from "@/lib/ia/mensagem-retorno";
 
 type PetshopEnvio = { id: string; nome: string; endereco: string | null; modelos_mensagem: unknown; slug: string };
 
@@ -20,16 +22,49 @@ async function lerPetshop(supabase: SupabaseClient, petshopId: string): Promise<
   return (data as PetshopEnvio | null) ?? null;
 }
 
-/** Monta o texto e manda pelo WhatsApp do petshop. */
-export async function enviarParaPet(
+type ItemEnvio = { tipo: "retorno"; retorno: Retorno } | { tipo: "plano_sobrando"; plano: PlanoSobrando };
+
+/** Com `ia`, tenta escrever com a IA; se ela falhar, usa o texto padrão do petshop. */
+export async function montarTexto(
   petshop: PetshopEnvio,
-  item: { tipo: "retorno"; retorno: Retorno } | { tipo: "plano_sobrando"; plano: PlanoSobrando }
-): Promise<ResultadoEnvio> {
+  item: ItemEnvio,
+  ia: { tom: string | null } | null
+): Promise<{ texto: string; porIa: boolean; erroIa?: string }> {
   const link = `${await appUrl()}/agendar/${petshop.slug}`;
+  const pet = item.tipo === "retorno" ? item.retorno : item.plano;
+  let erroIa: string | undefined;
+  if (ia && iaDisponivel()) {
+    try {
+      const r = item.tipo === "retorno" ? item.retorno : null;
+      const texto = await escreverMensagemIa({
+        petshopNome: petshop.nome,
+        tom: ia.tom,
+        tutorPrimeiroNome: pet.tutorNome.trim().split(/\s+/)[0] ?? pet.tutorNome,
+        petNome: pet.petNome,
+        tipo: item.tipo,
+        servicoNome: r?.servicoNome ?? "banho",
+        diasDesdeUltima: r?.diasDesdeUltima ?? null,
+        intervaloDias: r && !r.intervaloEstimado ? r.intervaloDias : null,
+        visitas: r?.visitas ?? 0,
+        planoNome: item.tipo === "plano_sobrando" ? item.plano.planoNome : undefined,
+        saldo: item.tipo === "plano_sobrando" ? item.plano.saldo : undefined,
+        linkAgendar: link,
+      });
+      return { texto, porIa: true };
+    } catch (error) {
+      erroIa = error instanceof Error ? error.message : "A IA falhou.";
+      console.error("IA da mensagem de retorno falhou; usando o texto padrão", error);
+    }
+  } else if (ia) {
+    erroIa = new IaIndisponivel().message;
+  }
+  return { texto: textoPadrao(petshop, item, link), porIa: false, erroIa };
+}
+
+function textoPadrao(petshop: PetshopEnvio, item: ItemEnvio, link: string): string {
   const p = { nome: petshop.nome, endereco: petshop.endereco, modelos: petshop.modelos_mensagem };
   const pet = item.tipo === "retorno" ? item.retorno : item.plano;
-  const texto =
-    item.tipo === "retorno"
+  return item.tipo === "retorno"
       ? templateRetorno({
           petshop: p,
           tutorNome: pet.tutorNome,
@@ -46,6 +81,16 @@ export async function enviarParaPet(
           saldo: item.plano.saldo,
           linkAgendar: link,
         });
+}
+
+/** Manda pelo WhatsApp do petshop (texto pronto, ou montado agora). */
+export async function enviarParaPet(
+  petshop: PetshopEnvio,
+  item: ItemEnvio,
+  opcoes: { texto?: string; ia?: { tom: string | null } | null } = {}
+): Promise<ResultadoEnvio> {
+  const pet = item.tipo === "retorno" ? item.retorno : item.plano;
+  const texto = opcoes.texto?.trim() || (await montarTexto(petshop, item, opcoes.ia ?? null)).texto;
   return enviarMensagemWhatsapp({
     petshopId: petshop.id,
     tutorId: pet.tutorId,
@@ -163,7 +208,9 @@ export async function executarRotinaRetorno(agora: DateTime = DateTime.now().set
       }
       const petshop = await lerPetshop(admin, petshopId);
       if (!petshop) continue;
-      const r = await enviarParaPet(petshop, item);
+      const r = await enviarParaPet(petshop, item, {
+        ia: atual.config.usar_ia ? { tom: atual.config.tom_ia } : null,
+      });
       await admin
         .from("mensagens_agendadas")
         .update(r.ok ? { status: "enviada", enviada_em: new Date().toISOString() } : { status: "erro", erro: r.erro })
@@ -183,26 +230,18 @@ export async function enviarAgora(
   supabase: SupabaseClient,
   petshopId: string,
   petId: string,
-  tipo: "retorno" | "plano_sobrando"
+  tipo: "retorno" | "plano_sobrando",
+  texto?: string
 ): Promise<ResultadoEnvio> {
   const dados = await carregarRetornos(supabase, petshopId);
   if (!dados.whatsappConectado) return { ok: false, erro: "WhatsApp desconectado. Conecte em Configurações." };
-  const item =
-    tipo === "plano_sobrando"
-      ? (() => {
-          const plano = dados.planosSobrando.find((p) => p.petId === petId);
-          return plano ? ({ tipo, plano } as const) : null;
-        })()
-      : (() => {
-          const retorno = dados.retornos.find((r) => r.petId === petId);
-          return retorno ? ({ tipo, retorno } as const) : null;
-        })();
+  const item = itemDoPet(dados, petId, tipo);
   if (!item) return { ok: false, erro: "Esse pet não está mais na lista de oportunidades." };
   const petshop = await lerPetshop(supabase, petshopId);
   if (!petshop) return { ok: false, erro: "Petshop não encontrado." };
 
   const pet = item.tipo === "retorno" ? item.retorno : item.plano;
-  const r = await enviarParaPet(petshop, item);
+  const r = await enviarParaPet(petshop, item, { texto });
   // A pendência automática desse pet (se tinha) deixa de valer.
   await supabase
     .from("mensagens_agendadas")
@@ -222,4 +261,29 @@ export async function enviarAgora(
     erro: r.ok ? null : r.erro,
   });
   return r;
+}
+
+function itemDoPet(dados: DadosRetorno, petId: string, tipo: "retorno" | "plano_sobrando"): ItemEnvio | null {
+  if (tipo === "plano_sobrando") {
+    const plano = dados.planosSobrando.find((p) => p.petId === petId);
+    return plano ? { tipo, plano } : null;
+  }
+  const retorno = dados.retornos.find((r) => r.petId === petId);
+  return retorno ? { tipo, retorno } : null;
+}
+
+/** Prévia da mensagem do painel: texto padrão, ou escrito pela IA. */
+export async function previaMensagem(
+  supabase: SupabaseClient,
+  petshopId: string,
+  petId: string,
+  tipo: "retorno" | "plano_sobrando",
+  comIa: boolean
+): Promise<{ texto: string; porIa: boolean; erroIa?: string } | { erro: string }> {
+  const dados = await carregarRetornos(supabase, petshopId);
+  const item = itemDoPet(dados, petId, tipo);
+  if (!item) return { erro: "Esse pet não está mais na lista de oportunidades." };
+  const petshop = await lerPetshop(supabase, petshopId);
+  if (!petshop) return { erro: "Petshop não encontrado." };
+  return montarTexto(petshop, item, comIa ? { tom: dados.config.tom_ia } : null);
 }

@@ -14,6 +14,10 @@ export type RetornoConfig = {
   avisar_plano_sobrando: boolean;
   dias_fim_mes: number;
   planejado_em: string | null;
+  /** Mensagens automáticas escritas pela IA (com o texto padrão de reserva). */
+  usar_ia: boolean;
+  /** Como o petshop fala com os clientes, pra IA seguir. */
+  tom_ia: string | null;
 };
 
 export const CONFIG_PADRAO: RetornoConfig = {
@@ -28,6 +32,8 @@ export const CONFIG_PADRAO: RetornoConfig = {
   avisar_plano_sobrando: true,
   dias_fim_mes: 10,
   planejado_em: null,
+  usar_ia: false,
+  tom_ia: null,
 };
 
 /** Um atendimento que já aconteceu (não cancelado nem falta). */

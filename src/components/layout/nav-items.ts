@@ -8,6 +8,7 @@ import {
   Settings,
   ShieldCheck,
   ClipboardList,
+  Package,
   TrendingUp,
   UserCog,
 } from "lucide-react";
@@ -24,6 +25,7 @@ export const NAV_ITEMS = [
   { href: "/oportunidades", label: "Oportunidades", icon: TrendingUp },
   { href: "/planos", label: "Planos", icon: Wallet },
   { href: "/servicos", label: "Serviços", icon: Scissors },
+  { href: "/estoque", label: "Estoque", icon: Package },
   { href: "/financeiro", label: "Financeiro", icon: Landmark },
   { href: "/configuracoes", label: "Configurações", icon: Settings },
 ] as const;

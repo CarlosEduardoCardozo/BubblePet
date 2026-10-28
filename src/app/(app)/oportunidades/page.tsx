@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentPetshopId } from "@/lib/supabase/petshop";
 import { carregarRetornos } from "@/lib/retorno/carregar";
+import { iaDisponivel } from "@/lib/ia/openai";
 import { OportunidadesView, type Linha } from "./OportunidadesView";
 
 export const metadata = { title: "Oportunidades · BubblePet" };
@@ -64,6 +65,7 @@ export default async function OportunidadesPage() {
       linhas={linhas}
       config={dados.config}
       whatsappConectado={dados.whatsappConectado}
+      iaDisponivel={iaDisponivel()}
       voltaram={dados.voltaram}
     />
   );
