@@ -199,17 +199,18 @@ export async function dadosAgendamento(
   };
 }
 
-export async function ocupadosNoDia(petshopId: string, dataISO: string): Promise<Ocupado[]> {
+/** Com `excetoId`, o próprio atendimento não conta como ocupado (remarcar). */
+export async function ocupadosNoDia(petshopId: string, dataISO: string, excetoId?: string): Promise<Ocupado[]> {
   const admin = createAdminClient();
   const dia = DateTime.fromISO(dataISO, { zone: ZONE }).startOf("day");
   const { data } = await admin
     .from("agendamentos")
-    .select("inicio, fim")
+    .select("id, inicio, fim")
     .eq("petshop_id", petshopId)
     .neq("status", "cancelado")
     .lt("inicio", dia.plus({ days: 1 }).toUTC().toISO()!)
     .gt("fim", dia.toUTC().toISO()!);
-  return data ?? [];
+  return (data ?? []).filter((o) => o.id !== excetoId);
 }
 
 export type ResultadoAgendar =

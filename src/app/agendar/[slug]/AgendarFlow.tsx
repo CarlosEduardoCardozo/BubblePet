@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { DateTime } from "luxon";
 import { Check, ChevronLeft, Loader2, MessageCircle, Sparkles } from "lucide-react";
@@ -380,6 +381,13 @@ function PassoAgendar({
           Não sou eu
         </button>
       </div>
+
+      <Link
+        href={`/agendar/${slug}/minha-area`}
+        className="rounded-card glass px-5 py-3 text-center text-sm font-semibold text-primary shadow-[0_14px_40px_-16px_rgba(76,29,149,0.22)]"
+      >
+        Ver meus banhos, plano e extratos
+      </Link>
 
       <Cartao>
         <Titulo passo="1">Quem vai?</Titulo>
