@@ -317,6 +317,9 @@ export async function enviarRelatorioDono(competenciaRaw: string): Promise<Actio
         faturamentoCentavos: dados.previstoCentavos,
         atendimentos: dados.atendimentos,
         planosAtivos: dados.planosAtivos,
+        faturamentoAnteriorCentavos: dados.anterior.previstoCentavos,
+        clientesAtendidos: dados.clientesAtendidos,
+        faltas: dados.faltas,
       }),
     },
   });

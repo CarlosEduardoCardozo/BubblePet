@@ -263,6 +263,23 @@ function FechamentoTutorPdf({ dados }: { dados: FechamentoPdfInput }) {
 export type RelatorioPdfInput = {
   petshop: { nome: string };
   competencia: string;
+  /** Mês ainda em andamento: não compara com o mês anterior inteiro. */
+  parcial: boolean;
+  /** Mês anterior, pra comparar. */
+  anterior: { competencia: string; previstoCentavos: number; atendimentos: number };
+  faltas: number;
+  cancelados: number;
+  clientesAtendidos: number;
+  clientesQueVoltaram: number;
+  clientesDoMesAnterior: number;
+  melhoresDias: string[];
+  diasMovimento: { nome: string; quantidade: number }[];
+  fidelidade: {
+    premio: string;
+    premiosUsadosNoMes: number;
+    clientesComPremio: number;
+    clientesNoPrograma: number;
+  } | null;
   previstoCentavos: number;
   recebidoCentavos: number;
   emAbertoCentavos: number;
@@ -281,6 +298,16 @@ const STATUS_TUTOR: Record<RelatorioPdfInput["porTutor"][number]["status"], stri
   pago: "Pago",
   nao_gerado: "Não fechado",
 };
+
+/** "+12% que em setembro" / "igual a setembro"; null se o mês anterior não tem base. */
+function comparar(atual: number, antes: number, mesAnterior: string, parcial: boolean): string | null {
+  if (parcial) return "mês em andamento";
+  if (antes <= 0) return null;
+  const nome = DateTime.fromISO(mesAnterior).setLocale("pt-BR").toFormat("LLLL");
+  const pct = Math.round(((atual - antes) / antes) * 100);
+  if (pct === 0) return `igual a ${nome}`;
+  return `${pct > 0 ? "+" : ""}${pct}% que em ${nome}`;
+}
 
 function RelatorioMensalPdf({ dados }: { dados: RelatorioPdfInput }) {
   return (
@@ -301,6 +328,11 @@ function RelatorioMensalPdf({ dados }: { dados: RelatorioPdfInput }) {
           <View style={s.kpi}>
             <Text style={s.rotulo}>Movimento do mês</Text>
             <Text style={s.kpiValor}>{formatCentavos(dados.previstoCentavos)}</Text>
+            {comparar(dados.previstoCentavos, dados.anterior.previstoCentavos, dados.anterior.competencia, dados.parcial) && (
+              <Text style={{ color: MUTED }}>
+                {comparar(dados.previstoCentavos, dados.anterior.previstoCentavos, dados.anterior.competencia, dados.parcial)}
+              </Text>
+            )}
           </View>
           <View style={s.kpi}>
             <Text style={s.rotulo}>Recebido</Text>
@@ -317,6 +349,11 @@ function RelatorioMensalPdf({ dados }: { dados: RelatorioPdfInput }) {
             <Text style={s.rotulo}>Atendimentos realizados</Text>
             <Text style={s.kpiValor}>{dados.atendimentos}</Text>
             <Text style={{ color: MUTED }}>{dados.atendimentosCobertos} coberto{dados.atendimentosCobertos === 1 ? "" : "s"} por plano</Text>
+            {comparar(dados.atendimentos, dados.anterior.atendimentos, dados.anterior.competencia, dados.parcial) && (
+              <Text style={{ color: MUTED }}>
+                {comparar(dados.atendimentos, dados.anterior.atendimentos, dados.anterior.competencia, dados.parcial)}
+              </Text>
+            )}
           </View>
           <View style={s.kpi}>
             <Text style={s.rotulo}>Planos ativos</Text>
@@ -329,6 +366,49 @@ function RelatorioMensalPdf({ dados }: { dados: RelatorioPdfInput }) {
             <Text style={{ color: MUTED }}>{dados.creditosConsumidos} crédito{dados.creditosConsumidos === 1 ? "" : "s"} usado{dados.creditosConsumidos === 1 ? "" : "s"}</Text>
           </View>
         </View>
+
+        <Text style={s.secao}>Clientes e agenda</Text>
+        <View style={s.kpis}>
+          <View style={s.kpi}>
+            <Text style={s.rotulo}>Clientes atendidos</Text>
+            <Text style={s.kpiValor}>{dados.clientesAtendidos}</Text>
+            <Text style={{ color: MUTED }}>
+              {dados.clientesDoMesAnterior > 0
+                ? `${dados.clientesQueVoltaram} de ${dados.clientesDoMesAnterior} do mês passado voltaram`
+                : "sem mês anterior para comparar"}
+            </Text>
+          </View>
+          <View style={s.kpi}>
+            <Text style={s.rotulo}>Faltas e cancelamentos</Text>
+            <Text style={s.kpiValor}>{dados.faltas + dados.cancelados}</Text>
+            <Text style={{ color: MUTED }}>
+              {dados.faltas} falta{dados.faltas === 1 ? "" : "s"}, {dados.cancelados} cancelado{dados.cancelados === 1 ? "" : "s"}
+            </Text>
+          </View>
+          <View style={s.kpi}>
+            <Text style={s.rotulo}>Dia mais cheio</Text>
+            <Text style={s.kpiValor}>{dados.melhoresDias.length ? dados.melhoresDias.join(", ").replace(/, ([^,]*)$/, " e $1") : "—"}</Text>
+            <Text style={{ color: MUTED }}>
+              {dados.melhoresDias.length
+                ? `${Math.max(...dados.diasMovimento.map((d) => d.quantidade))} atendimentos`
+                : "sem atendimentos"}
+            </Text>
+          </View>
+        </View>
+
+        {dados.fidelidade && (
+          <View style={[s.kpis, { marginBottom: 8 }]}>
+            <View style={s.kpi}>
+              <Text style={s.rotulo}>Programa de fidelidade</Text>
+              <Text style={{ color: INK }}>
+                {dados.fidelidade.clientesNoPrograma} cliente{dados.fidelidade.clientesNoPrograma === 1 ? "" : "s"} no programa ·{" "}
+                {dados.fidelidade.clientesComPremio} com {dados.fidelidade.premio.toLowerCase()} para usar ·{" "}
+                {dados.fidelidade.premiosUsadosNoMes} prêmio{dados.fidelidade.premiosUsadosNoMes === 1 ? "" : "s"} usado
+                {dados.fidelidade.premiosUsadosNoMes === 1 ? "" : "s"} no mês
+              </Text>
+            </View>
+          </View>
+        )}
 
         <Text style={s.secao}>Por serviço</Text>
         <View style={s.tabela}>

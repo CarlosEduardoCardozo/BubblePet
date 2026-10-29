@@ -240,9 +240,23 @@ export function templateRelatorio(args: {
   faturamentoCentavos: number;
   atendimentos: number;
   planosAtivos: number;
+  /** Mês anterior, pra mostrar se subiu ou caiu. */
+  faturamentoAnteriorCentavos?: number;
+  clientesAtendidos?: number;
+  faltas?: number;
 }): string {
   const mes = DateTime.fromISO(args.competencia).setLocale("pt-BR").toFormat("LLLL 'de' yyyy");
-  return `📊 *Relatório de ${mes}* — ${args.petshopNome}\n\n• Movimento do mês: *${formatCentavos(args.faturamentoCentavos)}*\n• Atendimentos realizados: *${args.atendimentos}*\n• Planos ativos: *${args.planosAtivos}*\n\nO PDF completo segue em anexo.`;
+  const antes = args.faturamentoAnteriorCentavos ?? 0;
+  const pct = antes > 0 ? Math.round(((args.faturamentoCentavos - antes) / antes) * 100) : null;
+  const comparacao = pct === null ? "" : pct === 0 ? " (igual ao mês passado)" : ` (${pct > 0 ? "+" : ""}${pct}% sobre o mês passado)`;
+  const linhas = [
+    `• Movimento do mês: *${formatCentavos(args.faturamentoCentavos)}*${comparacao}`,
+    `• Atendimentos realizados: *${args.atendimentos}*`,
+    args.clientesAtendidos != null ? `• Clientes atendidos: *${args.clientesAtendidos}*` : "",
+    args.faltas ? `• Faltas: *${args.faltas}*` : "",
+    `• Planos ativos: *${args.planosAtivos}*`,
+  ].filter(Boolean);
+  return `📊 *Relatório de ${mes}* — ${args.petshopNome}\n\n${linhas.join("\n")}\n\nO PDF completo segue em anexo.`;
 }
 
 export function templateRetorno(args: {
