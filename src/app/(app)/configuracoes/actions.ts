@@ -166,7 +166,7 @@ export type EstadoConexao =
 function descreverErroUazapi(error: unknown): string {
   if (error instanceof UazapiError) {
     if (error.status === 401 || error.status === 403) {
-      return "A UAZAPI recusou o token. Verifique o UAZAPI_ADMIN_TOKEN ou reconecte.";
+      return "A conexão do WhatsApp caiu. Toque em Conectar para gerar um novo QR code.";
     }
     return `A UAZAPI respondeu com erro ${error.status}. Tente de novo em instantes.`;
   }
@@ -194,6 +194,18 @@ export async function conectarWhatsapp(opcoes?: { telefone?: string }): Promise<
 
   try {
     let token = await obterTokenWhatsapp(petshopId);
+    let resultado: Awaited<ReturnType<typeof conectar>> | null = null;
+
+    if (token) {
+      try {
+        resultado = await conectar(token, telefoneDigitos);
+      } catch (error) {
+        // A instância sumiu do servidor da UAZAPI (apagada ou expirada): o
+        // token guardado não vale mais, então cria uma nova em vez de travar.
+        if (error instanceof UazapiError && (error.status === 401 || error.status === 404)) token = null;
+        else throw error;
+      }
+    }
 
     if (!token) {
       const { data: petshop } = await supabase
@@ -202,16 +214,24 @@ export async function conectarWhatsapp(opcoes?: { telefone?: string }): Promise<
         .eq("id", petshopId)
         .single();
       const criada = await criarInstancia(`bubblepet-${petshop?.slug ?? petshopId}`);
-      const { error } = await admin.from("petshop_whatsapp").insert({
-        petshop_id: petshopId,
-        instance_id: criada.instanceId,
-        token: criada.token,
-      });
+      const { error } = await admin.from("petshop_whatsapp").upsert(
+        {
+          petshop_id: petshopId,
+          instance_id: criada.instanceId,
+          token: criada.token,
+          // Webhook novo: o registro antigo era da instância que caiu.
+          webhook_secret: null,
+          webhook_url: null,
+          atualizado_em: new Date().toISOString(),
+        },
+        { onConflict: "petshop_id" }
+      );
       if (error) return { error: mensagemErroBanco(error) };
       token = criada.token;
+      resultado = await conectar(token, telefoneDigitos);
     }
 
-    const resultado = await conectar(token, telefoneDigitos);
+    if (!resultado) return { error: "Não foi possível iniciar a conexão. Tente de novo." };
 
     if (resultado.loggedIn) {
       return await sincronizarStatus(petshopId, token);
@@ -265,6 +285,16 @@ export async function verificarWhatsapp(): Promise<EstadoConexao> {
   try {
     return await sincronizarStatus(petshopId, token);
   } catch (error) {
+    // Instância apagada no servidor: está desconectado de verdade, e o botão
+    // Conectar cria uma nova.
+    if (error instanceof UazapiError && (error.status === 401 || error.status === 404)) {
+      await supabase
+        .from("petshops")
+        .update({ whatsapp_status: "desconectado", whatsapp_numero: null, whatsapp_profile_nome: null })
+        .eq("id", petshopId);
+      revalidatePath("/", "layout");
+      return { status: "desconectado" };
+    }
     return { error: descreverErroUazapi(error) };
   }
 }
