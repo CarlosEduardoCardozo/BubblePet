@@ -12,6 +12,9 @@ import { formatCentavos } from "@/lib/currency";
 import { precoParaPorte } from "@/lib/servico-preco";
 import type { DadosAgendamento } from "@/lib/publico/dal";
 import {
+  cadastrarPet,
+  cadastrarTutorEPet,
+  cancelarCadastro,
   confirmarAgendamento,
   confirmarCodigo,
   listarHorarios,
@@ -80,11 +83,14 @@ export function AgendarFlow({
   petshop,
   dados,
   dias,
+  cadastroTelefone,
 }: {
   slug: string;
   petshop: Petshop;
   dados: DadosAgendamento | null;
   dias: string[];
+  /** Celular já confirmado por código, de quem ainda não tem cadastro. */
+  cadastroTelefone: string | null;
 }) {
   if (!petshop.whatsappConectado) {
     const wa = linkWhatsapp(petshop.telefone, `Oi! Quero agendar um banho pelo ${petshop.nome}.`);
@@ -106,6 +112,10 @@ export function AgendarFlow({
 
   if (dados) {
     return <PassoAgendar slug={slug} petshop={petshop} dados={dados} dias={dias} />;
+  }
+
+  if (cadastroTelefone) {
+    return <PassoCadastro slug={slug} petshop={petshop} telefone={cadastroTelefone} />;
   }
 
   return <PassoIdentificacao slug={slug} petshop={petshop} />;
@@ -163,8 +173,8 @@ function PassoIdentificacao({ slug, petshop }: { slug: string; petshop: Petshop 
         </button>
         <Titulo>Digite o código</Titulo>
         <p className="text-sm text-muted-foreground">
-          Se <span className="font-medium text-foreground">{telefone}</span> estiver cadastrado no{" "}
-          {petshop.nome}, o código de 6 dígitos chega pelo WhatsApp em instantes. Vale por 5 minutos — é só dessa vez: depois este celular fica lembrado.
+          Enviamos um código de 6 dígitos para o WhatsApp{" "}
+          <span className="font-medium text-foreground">{telefone}</span>. Ele chega em instantes e vale por 5 minutos — é só dessa vez: depois este celular fica lembrado.
         </p>
         <form onSubmit={confirmar} className="mt-4 flex flex-col gap-3">
           <Input
@@ -188,7 +198,7 @@ function PassoIdentificacao({ slug, petshop }: { slug: string; petshop: Petshop 
           </button>
           {wa && (
             <a href={wa} className="underline">
-              Não tenho cadastro / preciso de ajuda
+              Preciso de ajuda
             </a>
           )}
         </div>
@@ -200,8 +210,8 @@ function PassoIdentificacao({ slug, petshop }: { slug: string; petshop: Petshop 
     <Cartao>
       <Titulo>Agende o banho do seu pet</Titulo>
       <p className="text-sm text-muted-foreground">
-        Digite o celular cadastrado no {petshop.nome}. Na primeira vez, você recebe um
-        código pelo WhatsApp; depois este celular fica lembrado e é só escolher o horário.
+        Digite seu celular com DDD. Você recebe um código pelo WhatsApp para confirmar que é
+        você. Se é a primeira vez no {petshop.nome}, o cadastro do seu pet leva um minutinho.
       </p>
       <form onSubmit={pedirCodigo} className="mt-4 flex flex-col gap-3">
         <Input
@@ -222,13 +232,202 @@ function PassoIdentificacao({ slug, petshop }: { slug: string; petshop: Petshop 
       <Erro mensagem={erro} />
       {wa && (
         <p className="mt-4 text-center text-xs text-muted-foreground">
-          Ainda não é cliente?{" "}
+          Precisa de ajuda?{" "}
           <a href={wa} className="underline">
             Fale com o petshop
           </a>
         </p>
       )}
     </Cartao>
+  );
+}
+
+const ESPECIES = [
+  { valor: "cachorro", label: "Cachorro" },
+  { valor: "gato", label: "Gato" },
+  { valor: "outro", label: "Outro" },
+];
+const PORTES_OPCOES = [
+  { valor: "pequeno", label: "Pequeno" },
+  { valor: "medio", label: "Médio" },
+  { valor: "grande", label: "Grande" },
+];
+
+function Opcoes({
+  titulo,
+  opcoes,
+  valor,
+  onChange,
+}: {
+  titulo: string;
+  opcoes: { valor: string; label: string }[];
+  valor: string;
+  onChange: (v: string) => void;
+}) {
+  return (
+    <div className="flex flex-col gap-1.5">
+      <span className="text-sm font-medium">{titulo}</span>
+      <div className="flex flex-wrap gap-2">
+        {opcoes.map((o) => (
+          <button
+            key={o.valor}
+            type="button"
+            onClick={() => onChange(o.valor)}
+            aria-pressed={valor === o.valor}
+            className={cn(
+              "rounded-full border px-4 py-2 text-sm font-medium transition-colors",
+              valor === o.valor
+                ? "border-primary bg-primary text-primary-foreground"
+                : "border-border bg-white hover:border-primary/50"
+            )}
+          >
+            {o.label}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+type CamposPet = { petNome: string; especie: string; porte: string; raca: string };
+const PET_VAZIO: CamposPet = { petNome: "", especie: "cachorro", porte: "", raca: "" };
+
+function CamposDoPet({ valor, onChange }: { valor: CamposPet; onChange: (parte: Partial<CamposPet>) => void }) {
+  return (
+    <>
+      <div className="flex flex-col gap-1.5">
+        <label htmlFor="pet-nome" className="text-sm font-medium">
+          Nome do pet
+        </label>
+        <Input
+          id="pet-nome"
+          value={valor.petNome}
+          onChange={(e) => onChange({ petNome: e.target.value })}
+          maxLength={60}
+          placeholder="Ex.: Thor"
+          className="h-12 text-base"
+        />
+      </div>
+      <Opcoes titulo="É um..." opcoes={ESPECIES} valor={valor.especie} onChange={(v) => onChange({ especie: v })} />
+      <Opcoes titulo="Porte" opcoes={PORTES_OPCOES} valor={valor.porte} onChange={(v) => onChange({ porte: v })} />
+      <div className="flex flex-col gap-1.5">
+        <label htmlFor="pet-raca" className="text-sm font-medium">
+          Raça <span className="font-normal text-muted-foreground">(opcional)</span>
+        </label>
+        <Input
+          id="pet-raca"
+          value={valor.raca}
+          onChange={(e) => onChange({ raca: e.target.value })}
+          maxLength={60}
+          placeholder="Ex.: Shih tzu"
+          className="h-12 text-base"
+        />
+      </div>
+    </>
+  );
+}
+
+function PassoCadastro({ slug, petshop, telefone }: { slug: string; petshop: Petshop; telefone: string }) {
+  const router = useRouter();
+  const [nome, setNome] = useState("");
+  const [pet, setPet] = useState<CamposPet>(PET_VAZIO);
+  const [erro, setErro] = useState<string | null>(null);
+  const [isPending, startTransition] = useTransition();
+  const pronto = nome.trim().length >= 2 && pet.petNome.trim().length >= 1 && !!pet.porte;
+
+  function enviar(event: React.FormEvent) {
+    event.preventDefault();
+    setErro(null);
+    startTransition(async () => {
+      const r = await cadastrarTutorEPet(slug, { nome, ...pet });
+      if (!r.ok) {
+        setErro(r.erro);
+        return;
+      }
+      router.refresh();
+    });
+  }
+
+  return (
+    <Cartao>
+      <Titulo>Primeira vez por aqui? 🐾</Titulo>
+      <p className="text-sm text-muted-foreground">
+        Seu celular <span className="font-medium text-foreground">{telefone}</span> foi confirmado, mas ainda não
+        tem cadastro no {petshop.nome}. Conte um pouco sobre você e seu pet para escolher o horário.
+      </p>
+      <form onSubmit={enviar} className="mt-4 flex flex-col gap-4">
+        <div className="flex flex-col gap-1.5">
+          <label htmlFor="tutor-nome" className="text-sm font-medium">
+            Seu nome
+          </label>
+          <Input
+            id="tutor-nome"
+            value={nome}
+            onChange={(e) => setNome(e.target.value)}
+            maxLength={80}
+            autoComplete="name"
+            autoFocus
+            placeholder="Nome e sobrenome"
+            className="h-12 text-base"
+          />
+        </div>
+        <CamposDoPet valor={pet} onChange={(parte) => setPet((atual) => ({ ...atual, ...parte }))} />
+        <Button type="submit" size="lg" className="h-12 w-full text-base" disabled={isPending || !pronto}>
+          {isPending ? <Loader2 size={18} className="animate-spin" /> : "Cadastrar e escolher o horário"}
+        </Button>
+      </form>
+      <Erro mensagem={erro} />
+      <button
+        type="button"
+        className="mt-4 block w-full text-center text-xs text-muted-foreground underline"
+        onClick={() =>
+          startTransition(async () => {
+            await cancelarCadastro(slug);
+            router.refresh();
+          })
+        }
+      >
+        Não é o meu número
+      </button>
+    </Cartao>
+  );
+}
+
+/** Mais um pet para quem já é cliente (ou o primeiro, se a conta está sem pets). */
+function NovoPet({ slug, onCriado, onCancelar }: { slug: string; onCriado: () => void; onCancelar?: () => void }) {
+  const [pet, setPet] = useState<CamposPet>(PET_VAZIO);
+  const [erro, setErro] = useState<string | null>(null);
+  const [isPending, startTransition] = useTransition();
+  const pronto = pet.petNome.trim().length >= 1 && !!pet.porte;
+
+  function enviar(event: React.FormEvent) {
+    event.preventDefault();
+    setErro(null);
+    startTransition(async () => {
+      const r = await cadastrarPet(slug, pet);
+      if (!r.ok) {
+        setErro(r.erro);
+        return;
+      }
+      onCriado();
+    });
+  }
+
+  return (
+    <form onSubmit={enviar} className="flex flex-col gap-4">
+      <CamposDoPet valor={pet} onChange={(parte) => setPet((atual) => ({ ...atual, ...parte }))} />
+      <div className="flex gap-2">
+        <Button type="submit" className="flex-1" disabled={isPending || !pronto}>
+          {isPending ? <Loader2 size={16} className="animate-spin" /> : "Cadastrar pet"}
+        </Button>
+        {onCancelar && (
+          <Button type="button" variant="ghost" onClick={onCancelar}>
+            Voltar
+          </Button>
+        )}
+      </div>
+      <Erro mensagem={erro} />
+    </form>
   );
 }
 
@@ -251,6 +450,7 @@ function PassoAgendar({
   const [horarios, setHorarios] = useState<string[] | null>(null);
   const [erro, setErro] = useState<string | null>(null);
   const [sucesso, setSucesso] = useState<Sucesso | null>(null);
+  const [novoPet, setNovoPet] = useState(false);
   const [isPending, startTransition] = useTransition();
   const [carregandoHorarios, startHorarios] = useTransition();
 
@@ -343,24 +543,20 @@ function PassoAgendar({
     );
   }
 
+  const podeConfirmar = !!petId && !!servicoId && !!dataISO && !!hora && !isPending;
+
+  // Conta sem nenhum pet: o cadastro do pet vem antes de escolher o horário.
   if (dados.pets.length === 0) {
-    const wa = linkWhatsapp(petshop.telefone, `Oi! Sou ${dados.tutorNome} e quero cadastrar meu pet para agendar pelo link.`);
     return (
       <Cartao>
-        <Titulo>Oi, {primeiroNome}!</Titulo>
-        <p className="text-sm text-muted-foreground">
-          Ainda não tem nenhum pet no seu cadastro. Peça pro petshop incluir e volte aqui.
+        <Titulo>Oi, {primeiroNome}! Cadastre seu pet 🐾</Titulo>
+        <p className="mb-4 text-sm text-muted-foreground">
+          Seu cadastro no {petshop.nome} ainda não tem nenhum pet. Conte sobre ele para escolher o horário.
         </p>
-        {wa && (
-          <Button className="mt-4 w-full" nativeButton={false} render={<a href={wa} />}>
-            <MessageCircle size={16} /> Falar com o petshop
-          </Button>
-        )}
+        <NovoPet slug={slug} onCriado={() => router.refresh()} />
       </Cartao>
     );
   }
-
-  const podeConfirmar = !!petId && !!servicoId && !!dataISO && !!hora && !isPending;
 
   return (
     <div className="flex flex-col gap-4">
@@ -429,7 +625,28 @@ function PassoAgendar({
               </button>
             );
           })}
+          {!novoPet && (
+            <button
+              type="button"
+              onClick={() => setNovoPet(true)}
+              className="rounded-full border border-dashed border-primary/50 px-3 py-2 text-sm font-medium text-primary hover:bg-primary/5"
+            >
+              + Outro pet
+            </button>
+          )}
         </div>
+        {novoPet && (
+          <div className="mt-4 border-t border-border pt-4">
+            <NovoPet
+              slug={slug}
+              onCriado={() => {
+                setNovoPet(false);
+                router.refresh();
+              }}
+              onCancelar={() => setNovoPet(false)}
+            />
+          </div>
+        )}
       </Cartao>
 
       <Cartao>

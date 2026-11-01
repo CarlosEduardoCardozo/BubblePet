@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import { PawPrint } from "lucide-react";
 import { proximosDiasAbertos } from "@/lib/agenda/slots";
-import { getSessaoTutor } from "@/lib/publico/session";
+import { getSessaoCadastro, getSessaoTutor } from "@/lib/publico/session";
 import { dadosAgendamento, petshopPorSlug } from "@/lib/publico/dal";
 import { AgendarFlow } from "./AgendarFlow";
 
@@ -18,6 +18,9 @@ export default async function AgendarPage({
   const dados = sessao && sessao.petshopId === petshop.id
     ? await dadosAgendamento(petshop.id, sessao.tutorId)
     : null;
+
+  const cadastro = !dados ? await getSessaoCadastro(slug) : null;
+  const cadastroTelefone = cadastro && cadastro.petshopId === petshop.id ? cadastro.telefone : null;
 
   const dias = proximosDiasAbertos(petshop.horario, 14);
 
@@ -47,6 +50,7 @@ export default async function AgendarPage({
         }}
         dados={dados}
         dias={dias}
+        cadastroTelefone={cadastroTelefone}
       />
 
       <footer className="mt-auto pt-10 text-center text-[11px] text-muted-foreground">

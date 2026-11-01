@@ -64,3 +64,53 @@ export const getSessaoTutor = cache(async (slug: string): Promise<SessaoTutor | 
     return null;
   }
 });
+
+// Cadastro de cliente novo: depois de confirmar o código, o celular fica
+// "verificado" por 30 minutos, só o tempo de preencher tutor e pet. Cookie
+// separado da sessão do tutor, com outro tipo, para um não valer pelo outro.
+const PREFIXO_CADASTRO = "bp_cadastro_";
+const DURACAO_CADASTRO_SEG = 30 * 60;
+
+export type SessaoCadastro = { telefone: string; petshopId: string; slug: string };
+
+function nomeCookieCadastro(slug: string): string {
+  return PREFIXO_CADASTRO + slug.replace(/[^a-z0-9-]/g, "");
+}
+
+export async function criarSessaoCadastro(sessao: SessaoCadastro): Promise<void> {
+  const token = await new SignJWT({ ...sessao, tipo: "cadastro" })
+    .setProtectedHeader({ alg: "HS256" })
+    .setIssuedAt()
+    .setExpirationTime(`${DURACAO_CADASTRO_SEG}s`)
+    .sign(segredo());
+
+  const store = await cookies();
+  store.set({
+    name: nomeCookieCadastro(sessao.slug),
+    value: token,
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    path: "/agendar",
+    maxAge: DURACAO_CADASTRO_SEG,
+  });
+}
+
+export async function encerrarSessaoCadastro(slug: string): Promise<void> {
+  const store = await cookies();
+  store.set({ name: nomeCookieCadastro(slug), value: "", path: "/agendar", maxAge: 0 });
+}
+
+export const getSessaoCadastro = cache(async (slug: string): Promise<SessaoCadastro | null> => {
+  const store = await cookies();
+  const token = store.get(nomeCookieCadastro(slug))?.value;
+  if (!token) return null;
+  try {
+    const { payload } = await jwtVerify(token, segredo(), { algorithms: ["HS256"] });
+    if (payload.tipo !== "cadastro" || payload.slug !== slug) return null;
+    if (typeof payload.telefone !== "string" || typeof payload.petshopId !== "string") return null;
+    return { telefone: payload.telefone, petshopId: payload.petshopId, slug };
+  } catch {
+    return null;
+  }
+});

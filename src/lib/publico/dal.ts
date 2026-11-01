@@ -371,3 +371,109 @@ export async function agendarPublico(params: {
     valorCentavos: preco,
   };
 }
+
+export type DadosPetNovo = {
+  nome: string;
+  especie: "cachorro" | "gato" | "outro";
+  porte: "pequeno" | "medio" | "grande" | null;
+  raca: string | null;
+};
+
+const MAX_PETS_POR_TUTOR = 8;
+
+/** Pet novo do tutor logado no link público. */
+export async function criarPetPublico(
+  petshopId: string,
+  tutorId: string,
+  pet: DadosPetNovo
+): Promise<{ ok: true; petId: string } | { ok: false; erro: string }> {
+  const admin = createAdminClient();
+  const { count } = await admin
+    .from("pets")
+    .select("id", { count: "exact", head: true })
+    .eq("petshop_id", petshopId)
+    .eq("tutor_id", tutorId)
+    .eq("ativo", true);
+  if ((count ?? 0) >= MAX_PETS_POR_TUTOR) {
+    return { ok: false, erro: "Você já tem muitos pets cadastrados. Fale com o petshop para incluir mais." };
+  }
+  const { data, error } = await admin
+    .from("pets")
+    .insert({
+      petshop_id: petshopId,
+      tutor_id: tutorId,
+      nome: pet.nome,
+      especie: pet.especie,
+      porte: pet.porte,
+      raca: pet.raca,
+      observacoes: "Cadastrado pelo link público",
+    })
+    .select("id")
+    .single();
+  if (error || !data) return { ok: false, erro: "Não foi possível cadastrar o pet. Tente de novo." };
+  return { ok: true, petId: data.id };
+}
+
+/**
+ * Cliente novo pelo link público: cria o tutor (celular já confirmado por
+ * código) e o primeiro pet. Se o celular já tem cadastro (corrida entre duas
+ * abas), reaproveita o tutor em vez de duplicar.
+ */
+export async function criarTutorPublico(params: {
+  petshopId: string;
+  telefone: string;
+  nome: string;
+  pet: DadosPetNovo;
+}): Promise<{ ok: true; tutorId: string } | { ok: false; erro: string }> {
+  const admin = createAdminClient();
+  const existente = await tutorPorTelefone(params.petshopId, params.telefone);
+  let tutorId: string;
+
+  if (existente) {
+    tutorId = existente.id;
+  } else {
+    const { data, error } = await admin
+      .from("tutores")
+      .insert({
+        petshop_id: params.petshopId,
+        nome: params.nome,
+        telefone: params.telefone,
+        observacoes: "Cadastrado pelo link público",
+      })
+      .select("id")
+      .single();
+    if (error || !data) return { ok: false, erro: "Não foi possível fazer o cadastro. Tente de novo." };
+    tutorId = data.id;
+  }
+
+  const pet = await criarPetPublico(params.petshopId, tutorId, params.pet);
+  if (!pet.ok) {
+    // Cadastro novo sem pet não serve: desfaz o tutor que acabou de ser criado.
+    if (!existente) await admin.from("tutores").delete().eq("id", tutorId);
+    return { ok: false, erro: pet.erro };
+  }
+  return { ok: true, tutorId };
+}
+
+const MAX_CADASTROS_HORA = 15;
+const MAX_CADASTROS_DIA = 60;
+
+/**
+ * Teto de clientes novos pelo link: segura quem tentar encher a base de
+ * cadastros falsos, sem atrapalhar o movimento normal de um petshop.
+ */
+export async function cadastrosRecentesDemais(petshopId: string): Promise<boolean> {
+  const admin = createAdminClient();
+  const desde = (h: number) => new Date(Date.now() - h * 3_600_000).toISOString();
+  const contar = async (horas: number) =>
+    (
+      await admin
+        .from("tutores")
+        .select("id", { count: "exact", head: true })
+        .eq("petshop_id", petshopId)
+        .eq("observacoes", "Cadastrado pelo link público")
+        .gte("criado_em", desde(horas))
+    ).count ?? 0;
+  const [hora, dia] = await Promise.all([contar(1), contar(24)]);
+  return hora >= MAX_CADASTROS_HORA || dia >= MAX_CADASTROS_DIA;
+}
