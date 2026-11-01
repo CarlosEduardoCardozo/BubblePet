@@ -48,18 +48,19 @@ export function ChegadaBloco({ agendamentoId }: { agendamentoId: string }) {
   const [isPending, startTransition] = useTransition();
   const entrada = useRef<HTMLInputElement>(null);
 
-  function aplicar(r: DadosChegada) {
-    setDados(r);
-    setCondicoes(r.condicoes);
-    setObservacao(r.observacao);
-    setMostrarTutor(r.mostrarTutor);
-    setAlterado(false);
-  }
+  // O bloco aparece na hora; o que já foi registrado chega em seguida. Se a
+  // pessoa já mexeu, o que veio do servidor não sobrescreve o que ela marcou.
+  const mexeu = useRef(false);
 
   useEffect(() => {
     let cancelado = false;
     carregarChegada(agendamentoId).then((r) => {
-      if (!cancelado && !("error" in r)) aplicar(r);
+      if (cancelado || "error" in r) return;
+      setDados(r);
+      if (mexeu.current) return;
+      setCondicoes(r.condicoes);
+      setObservacao(r.observacao);
+      setMostrarTutor(r.mostrarTutor);
     });
     return () => {
       cancelado = true;
@@ -72,6 +73,7 @@ export function ChegadaBloco({ agendamentoId }: { agendamentoId: string }) {
   }
 
   function alternar(valor: string) {
+    mexeu.current = true;
     setCondicoes((c) => (c.includes(valor) ? c.filter((x) => x !== valor) : [...c, valor]));
     setAlterado(true);
   }
@@ -136,8 +138,8 @@ export function ChegadaBloco({ agendamentoId }: { agendamentoId: string }) {
     });
   }
 
-  if (!dados) return null;
-  const temRegistro = condicoes.length > 0 || observacao.trim() !== "" || dados.midias.length > 0;
+  const midias = dados?.midias ?? [];
+  const temRegistro = condicoes.length > 0 || observacao.trim() !== "" || midias.length > 0;
 
   return (
     <div className="flex flex-col gap-3 rounded-xl border border-border p-3 text-sm">
@@ -145,7 +147,11 @@ export function ChegadaBloco({ agendamentoId }: { agendamentoId: string }) {
         <span className="flex items-center gap-2 font-medium">
           <ClipboardList size={15} className="text-primary" /> Como o pet chegou
         </span>
-        {!temRegistro && <span className="text-xs text-muted-foreground">nada registrado</span>}
+        {!dados ? (
+          <Loader2 size={14} className="animate-spin text-muted-foreground" />
+        ) : (
+          !temRegistro && <span className="text-xs text-muted-foreground">nada registrado</span>
+        )}
       </div>
 
       <div className="flex flex-wrap gap-1.5">
@@ -170,6 +176,7 @@ export function ChegadaBloco({ agendamentoId }: { agendamentoId: string }) {
       <Textarea
         value={observacao}
         onChange={(e) => {
+          mexeu.current = true;
           setObservacao(e.target.value);
           setAlterado(true);
         }}
@@ -179,7 +186,7 @@ export function ChegadaBloco({ agendamentoId }: { agendamentoId: string }) {
       />
 
       <div className="flex flex-wrap gap-2">
-        {dados.midias.map((m) => (
+        {midias.map((m) => (
           <div key={m.id} className="group relative size-20 overflow-hidden rounded-lg border border-border bg-muted">
             {m.tipo === "foto" ? (
               <a href={m.url} target="_blank" rel="noreferrer">
@@ -208,7 +215,8 @@ export function ChegadaBloco({ agendamentoId }: { agendamentoId: string }) {
         <button
           type="button"
           onClick={() => entrada.current?.click()}
-          className="flex size-20 flex-col items-center justify-center gap-1 rounded-lg border border-dashed border-primary/50 text-xs font-semibold text-primary hover:bg-primary/5"
+          disabled={!dados}
+          className="flex size-20 flex-col items-center justify-center gap-1 rounded-lg border border-dashed border-primary/50 text-xs font-semibold text-primary hover:bg-primary/5 disabled:opacity-50"
         >
           <Camera size={18} /> Foto ou vídeo
         </button>
@@ -226,6 +234,7 @@ export function ChegadaBloco({ agendamentoId }: { agendamentoId: string }) {
         <Checkbox
           checked={mostrarTutor}
           onCheckedChange={(v) => {
+            mexeu.current = true;
             setMostrarTutor(v === true);
             setAlterado(true);
           }}

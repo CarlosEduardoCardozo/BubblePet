@@ -208,7 +208,7 @@ export function AgendamentoDetailSheet({
           </SheetHeader>
 
           {dados && inicio && fim && !editando && (
-            <div className="flex flex-1 flex-col gap-4 px-4">
+            <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-4 pb-4">
               <div className="flex items-center justify-between">
                 <StatusBadge status={dados.status} />
                 {!encerrado && <LembreteButton agendamentoId={dados.id} size="sm" variant="outline" />}
@@ -262,10 +262,10 @@ export function AgendamentoDetailSheet({
               </div>
 
               {dados.status !== "cancelado" && dados.status !== "faltou" && (
-                <FidelidadeBloco key={`fidelidade-${dados.id}`}agendamentoId={dados.id} onChanged={onChanged} />
+                <FidelidadeBloco key={`fidelidade-${dados.id}`} agendamentoId={dados.id} onChanged={onChanged} />
               )}
 
-              {dados.status !== "cancelado" && <ChegadaBloco key={`chegada-${dados.id}`}agendamentoId={dados.id} />}
+              {dados.status !== "cancelado" && <ChegadaBloco key={`chegada-${dados.id}`} agendamentoId={dados.id} />}
 
               {editandoExtras ? (
                 <div className="flex flex-col gap-2 rounded-xl border border-border p-3">
