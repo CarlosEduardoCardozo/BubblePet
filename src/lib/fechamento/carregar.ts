@@ -131,7 +131,8 @@ export async function carregarBaseFechamento(
       .in("status", [...STATUS_REALIZADO])
       .gte("inicio", inicio)
       .lt("inicio", limite),
-    carregarAssinaturasAtivas(supabase, petshopId),
+    // Só os planos que já existiam naquele mês: meses antigos não herdam planos novos.
+    carregarAssinaturasAtivas(supabase, petshopId, DateTime.fromISO(competencia, { zone: ZONE }).endOf("month").toISODate()!),
     carregarTutores(supabase, petshopId),
   ]);
 
