@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState, useRef } from "react";
+import { useCallback, useEffect, useState, useRef, useMemo } from "react";
 import { DateTime } from "luxon";
 import { Plus, Gift, SlidersHorizontal, PawPrint } from "lucide-react";
 import FullCalendar from "@fullcalendar/react";
@@ -357,8 +357,11 @@ export function AgendaView({
   const diasEscondidos = [1, 2, 3, 4, 5, 6, 7]
     .filter((dia) => !horarioDoDia(horario, dia) && !diasComAtendimento.has(dia % 7))
     .map((dia) => dia % 7);
-  // Nunca esconde a semana inteira.
-  const hiddenDays = diasEscondidos.length < 7 ? diasEscondidos : [];
+  // Nunca esconde a semana inteira. A lista precisa ter a MESMA identidade
+  // enquanto o conteúdo não muda: uma lista nova a cada renderização o
+  // calendário entende como mudança, recarrega a agenda e entra em ciclo.
+  const chaveEscondidos = (diasEscondidos.length < 7 ? diasEscondidos : []).join(",");
+  const hiddenDays = useMemo(() => (chaveEscondidos ? chaveEscondidos.split(",").map(Number) : []), [chaveEscondidos]);
 
   const detalhe = events.find((e) => e.id === detalheId) ?? null;
   const ocupados = events

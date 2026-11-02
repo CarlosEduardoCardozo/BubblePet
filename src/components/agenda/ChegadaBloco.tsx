@@ -35,6 +35,8 @@ export function ChegadaBloco({
   const [alterado, setAlterado] = useState(false);
   const [midias, setMidias] = useState<MidiaChegada[]>(inicial.midias);
   const [urls, setUrls] = useState<Record<string, string>>({});
+  // Arquivos que o armazenamento não devolveu (apagados): mostram aviso em vez de girar para sempre.
+  const [indisponiveis, setIndisponiveis] = useState<string[]>([]);
   const [enviando, setEnviando] = useState(0);
   const [qr, setQr] = useState<{ url: string; qrSvg: string; validadeMin: number } | null>(null);
   const [qrAberto, setQrAberto] = useState(false);
@@ -43,25 +45,29 @@ export function ChegadaBloco({
   const entrada = useRef<HTMLInputElement>(null);
 
   // Endereços temporários das fotos, pedidos direto do navegador (uma ida só).
+  // Cada arquivo é pedido uma vez só: se o arquivo não existir mais, não fica
+  // pedindo de novo para sempre (já houve ciclo de pedidos por isso).
+  const pedidos = useRef(new Set<string>());
   useEffect(() => {
-    const faltando = midias.filter((m) => !urls[m.caminho]);
+    const faltando = midias.filter((m) => !pedidos.current.has(m.caminho));
     if (faltando.length === 0) return;
-    let cancelado = false;
+    for (const m of faltando) pedidos.current.add(m.caminho);
     createClient()
       .storage.from(BALDE_REGISTROS)
       .createSignedUrls(faltando.map((m) => m.caminho), 3600)
       .then(({ data }) => {
-        if (cancelado || !data) return;
         setUrls((atual) => {
           const novo = { ...atual };
-          for (const d of data) if (d.path && d.signedUrl) novo[d.path] = d.signedUrl;
+          for (const d of data ?? []) {
+            if (d.path && d.signedUrl) {
+              novo[d.path] = d.signedUrl;
+            }
+          }
           return novo;
         });
+        setIndisponiveis((atual) => [...atual, ...faltando.map((m) => m.caminho).filter((c) => !(data ?? []).some((d) => d.path === c && d.signedUrl))]);
       });
-    return () => {
-      cancelado = true;
-    };
-  }, [midias, urls]);
+  }, [midias]);
 
   const recarregarMidias = useCallback(async () => {
     const { data } = await createClient()
@@ -217,6 +223,10 @@ export function ChegadaBloco({
               ) : (
                 <video src={urls[m.caminho]} controls preload="metadata" className="size-full object-cover" />
               )
+            ) : indisponiveis.includes(m.caminho) ? (
+              <span className="flex size-full items-center justify-center p-1 text-center text-[10px] text-muted-foreground">
+                Arquivo indisponível
+              </span>
             ) : (
               <span className="flex size-full items-center justify-center text-muted-foreground">
                 <Loader2 size={16} className="animate-spin" />
