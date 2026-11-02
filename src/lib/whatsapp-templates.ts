@@ -3,6 +3,7 @@ import { formatCentavos } from "@/lib/currency";
 import type { ResumoFechamento } from "@/lib/fechamento/resumo";
 import type { Adicional } from "@/lib/adicionais";
 import { renderizarModelo, textoDoModelo } from "@/lib/mensagens/modelos";
+import { RODAPE_PADRAO } from "@/lib/avisos";
 
 const ZONE = "America/Sao_Paulo";
 
@@ -46,7 +47,7 @@ export function templateOtp(petshopNome: string, codigo: string): string {
 }
 
 /** Linha de rodapé dos botões: funciona mesmo se o celular esconder os botões. */
-export const RODAPE_BOTOES = "Ou responda 1 para confirmar, 2 para cancelar.";
+export const RODAPE_BOTOES = RODAPE_PADRAO;
 
 export function templateConfirmacao(args: {
   petshop: Petshop;
@@ -79,6 +80,14 @@ export function templateConfirmacao(args: {
   });
 }
 
+/** "hoje", "amanhã" ou "daqui a N dias", pela data do atendimento. */
+function quandoEh(iso: string): string {
+  const dias = Math.round(
+    DateTime.fromISO(iso).setZone(ZONE).startOf("day").diff(DateTime.now().setZone(ZONE).startOf("day"), "days").days
+  );
+  return dias <= 0 ? "hoje" : dias === 1 ? "amanhã" : `daqui a ${dias} dias`;
+}
+
 export function templateLembrete(args: {
   petshop: Petshop;
   tutorNome: string;
@@ -91,6 +100,26 @@ export function templateLembrete(args: {
     ...dataHora(args.inicioISO),
     pet: args.petNome,
     servico: args.servicoNome,
+    quando: quandoEh(args.inicioISO),
+  });
+}
+
+export function templateDiaCancelado(args: {
+  petshop: Petshop;
+  tutorNome: string;
+  petNome: string;
+  servicoNome: string;
+  inicioISO: string;
+  motivo: string;
+  linkAgendar: string;
+}): string {
+  return renderizarModelo(textoDoModelo("dia_cancelado", args.petshop.modelos), {
+    ...base(args.petshop, args.tutorNome),
+    ...dataHora(args.inicioISO),
+    pet: args.petNome,
+    servico: args.servicoNome,
+    motivo: args.motivo,
+    link_agendar: args.linkAgendar,
   });
 }
 

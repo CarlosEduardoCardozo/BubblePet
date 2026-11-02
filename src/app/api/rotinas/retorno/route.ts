@@ -2,6 +2,7 @@ import { timingSafeEqual } from "node:crypto";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { executarRotinaRetorno } from "@/lib/retorno/enviar";
 import { executarAvisosFidelidade } from "@/lib/fidelidade-avisos";
+import { executarLembretes } from "@/lib/agenda/lembretes";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -16,7 +17,8 @@ function igual(a: string, b: string): boolean {
 /**
  * Chamado a cada 5 minutos pelo pg_cron do banco (função
  * chamar_rotina_retorno). O segredo vive em `sistema_rotinas`, que só o
- * service role lê. Também avisa quem ganhou prêmio no cartão fidelidade.
+ * service role lê. Também avisa quem ganhou prêmio no cartão fidelidade e
+ * manda os lembretes automáticos dos atendimentos.
  */
 export async function POST(request: Request) {
   const recebido = request.headers.get("x-rotina-segredo") ?? "";
@@ -27,5 +29,10 @@ export async function POST(request: Request) {
 
   const resumo = await executarRotinaRetorno();
   const fidelidade = await executarAvisosFidelidade();
-  return Response.json({ ...resumo, fidelidade });
+  // Um lembrete com problema não pode derrubar o resto da rotina.
+  const lembretes = await executarLembretes().catch((e) => {
+    console.error("Falha nos lembretes automáticos", e);
+    return null;
+  });
+  return Response.json({ ...resumo, fidelidade, lembretes });
 }

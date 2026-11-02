@@ -2,14 +2,19 @@ import Link from "next/link";
 import { ChevronLeft } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { PageHeader } from "@/components/shared/PageHeader";
-import { MODELOS, TIPOS_MODELO } from "@/lib/mensagens/modelos";
-import { ModeloEditor } from "./ModeloEditor";
+import { getCurrentPetshopId } from "@/lib/supabase/petshop";
+import { carregarAvisosConfig } from "@/lib/avisos";
+import { MensagensView } from "./MensagensView";
 
 export const metadata = { title: "Mensagens · BubblePet" };
 
 export default async function MensagensPage() {
   const supabase = await createClient();
-  const { data: petshop } = await supabase.from("petshops").select("modelos_mensagem").single();
+  const petshopId = await getCurrentPetshopId(supabase);
+  const [{ data: petshop }, avisos] = await Promise.all([
+    supabase.from("petshops").select("modelos_mensagem").single(),
+    carregarAvisosConfig(supabase, petshopId),
+  ]);
   const personalizados = (petshop?.modelos_mensagem as Record<string, string> | null) ?? {};
 
   return (
@@ -22,18 +27,9 @@ export default async function MensagensPage() {
       </Link>
       <PageHeader
         title="Mensagens do WhatsApp"
-        description="Escreva do jeito do seu petshop. As palavras entre chaves, como {tutor} e {data}, são trocadas pelos dados de cada cliente na hora do envio."
+        description="Toque numa mensagem para editar. Lá você escreve do seu jeito, escolhe os horários dos lembretes e personaliza os botões."
       />
-      <div className="grid gap-4 xl:grid-cols-2">
-        {TIPOS_MODELO.map((tipo) => (
-          <ModeloEditor
-            key={tipo}
-            tipo={tipo}
-            definicao={MODELOS[tipo]}
-            textoSalvo={personalizados[tipo] ?? null}
-          />
-        ))}
-      </div>
+      <MensagensView personalizados={personalizados} avisos={avisos} />
       <p className="text-xs text-muted-foreground">
         O código de acesso do link de agendamento tem texto fixo, pra funcionar sempre do mesmo jeito.
       </p>

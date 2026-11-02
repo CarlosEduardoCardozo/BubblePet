@@ -2,7 +2,8 @@ import "server-only";
 
 import { createAdminClient } from "@/lib/supabase/admin";
 import { botoesConfirmacao, enviarMensagemWhatsapp, type ResultadoEnvio } from "@/lib/whatsapp";
-import { RODAPE_BOTOES, templateConfirmacao, templateLembrete } from "@/lib/whatsapp-templates";
+import { templateConfirmacao, templateDiaCancelado, templateLembrete } from "@/lib/whatsapp-templates";
+import { carregarAvisosConfig, RODAPE_PADRAO } from "@/lib/avisos";
 import { lerAdicionais } from "@/lib/adicionais";
 
 type Um<T> = T | T[] | null | undefined;
@@ -81,17 +82,67 @@ export async function notificarAgendamento(
           })(),
         });
 
+  const avisos = await carregarAvisosConfig(admin, petshopId);
   const resultado = await enviarMensagemWhatsapp({
     petshopId,
     tutorId: tutor.id,
     numeroE164: tutor.telefone,
     tipo,
     texto,
-    botoes: botoesConfirmacao(ag.id),
-    rodape: RODAPE_BOTOES,
+    botoes: botoesConfirmacao(ag.id, { confirmar: avisos.botao_confirmar, cancelar: avisos.botao_cancelar }),
+    rodape: avisos.rodape ?? RODAPE_PADRAO,
   });
   if (!resultado.ok) {
     console.error("notificarAgendamento: envio falhou", { agendamentoId, tipo, erro: resultado.erro });
   }
   return resultado;
+}
+
+/**
+ * Avisa os tutores que o petshop cancelou o atendimento deles (dia fechado).
+ * Uma mensagem por atendimento, uma de cada vez, sem botões. Falha de um
+ * envio não para os outros.
+ */
+export async function notificarDiaCancelado(
+  petshopId: string,
+  agendamentoIds: string[],
+  motivo: string,
+  linkAgendar: string
+): Promise<{ enviados: number; erros: number }> {
+  const admin = createAdminClient();
+  const [{ data: ags }, { data: petshop }] = await Promise.all([
+    admin
+      .from("agendamentos")
+      .select("id, inicio, pets(nome, tutores(id, nome, telefone)), servicos(nome)")
+      .in("id", agendamentoIds)
+      .eq("petshop_id", petshopId),
+    admin.from("petshops").select("nome, endereco, modelos_mensagem").eq("id", petshopId).maybeSingle(),
+  ]);
+  const resumo = { enviados: 0, erros: 0 };
+  if (!petshop) return resumo;
+
+  for (const ag of ags ?? []) {
+    const pet = um(ag.pets as Um<{ nome: string; tutores: Um<{ id: string; nome: string; telefone: string }> }>);
+    const tutor = um(pet?.tutores);
+    const servico = um(ag.servicos as Um<{ nome: string }>);
+    if (!pet || !tutor || !servico) continue;
+    const r = await enviarMensagemWhatsapp({
+      petshopId,
+      tutorId: tutor.id,
+      numeroE164: tutor.telefone,
+      tipo: "dia_cancelado",
+      texto: templateDiaCancelado({
+        petshop: { nome: petshop.nome, endereco: petshop.endereco, modelos: petshop.modelos_mensagem },
+        tutorNome: tutor.nome,
+        petNome: pet.nome,
+        servicoNome: servico.nome,
+        inicioISO: ag.inicio,
+        motivo,
+        linkAgendar,
+      }),
+    });
+    if (r.ok) resumo.enviados++;
+    else resumo.erros++;
+  }
+  return resumo;
 }

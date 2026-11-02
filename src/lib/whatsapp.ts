@@ -14,6 +14,7 @@ import {
 export type TipoMensagem =
   | "teste"
   | "lembrete"
+  | "dia_cancelado"
   | "confirmacao"
   | "otp"
   | "fechamento"
@@ -164,9 +165,13 @@ export async function enviarMensagemWhatsapp(params: {
 }
 
 /** Botões padrão de confirmação de um agendamento. */
-export function botoesConfirmacao(agendamentoId: string) {
+export function botoesConfirmacao(
+  agendamentoId: string,
+  textos: { confirmar: string; cancelar: string } = { confirmar: "Confirmar", cancelar: "Cancelar" }
+) {
+  // O que vale é o id: o texto do botão o petshop troca como quiser.
   return [
-    { label: "✅ Confirmar", id: `confirmar:${agendamentoId}` },
-    { label: "❌ Cancelar", id: `cancelar:${agendamentoId}` },
+    { label: textos.confirmar, id: `confirmar:${agendamentoId}` },
+    { label: textos.cancelar, id: `cancelar:${agendamentoId}` },
   ];
 }

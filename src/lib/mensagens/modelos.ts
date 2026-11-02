@@ -7,6 +7,7 @@
 export type TipoModelo =
   | "confirmacao"
   | "lembrete"
+  | "dia_cancelado"
   | "resposta_confirmado"
   | "resposta_cancelado"
   | "fechamento"
@@ -36,6 +37,7 @@ const V = {
   dia_semana: { chave: "dia_semana", descricao: "Dia da semana", exemplo: "terça-feira" },
   hora: { chave: "hora", descricao: "Horário", exemplo: "09:00" },
   endereco: { chave: "endereco", descricao: "Endereço do petshop", exemplo: "Rua das Flores, 120" },
+  quando: { chave: "quando", descricao: "hoje, amanhã ou daqui a alguns dias", exemplo: "amanhã" },
 } satisfies Record<string, Variavel>;
 
 export const MODELOS: Record<TipoModelo, DefinicaoModelo> = {
@@ -54,11 +56,23 @@ export const MODELOS: Record<TipoModelo, DefinicaoModelo> = {
   },
   lembrete: {
     titulo: "Lembrete",
-    quando: "Pelo botão \"Enviar lembrete\" no agendamento. Também vai com Confirmar e Cancelar.",
-    variaveis: [V.saudacao, V.tutor, V.petshop, V.pet, V.servico, V.data, V.dia_semana, V.hora, V.endereco],
+    quando: "Automático, nos horários que você escolher (ex.: 24 h e 4 h antes), e pelo botão \"Enviar lembrete\" no agendamento. Vai com os botões de confirmar e cancelar.",
+    variaveis: [V.saudacao, V.tutor, V.petshop, V.pet, V.servico, V.data, V.dia_semana, V.hora, V.quando, V.endereco],
     padrao:
       "Oi, {tutor}! 🐾\n\nLembrete de *{petshop}*: o *{pet}* tem *{servico}* {dia_semana}, {data} às *{hora}*.\n\nPode confirmar se vem?",
     obrigatorias: ["data", "hora"],
+  },
+  dia_cancelado: {
+    titulo: "Dia cancelado pelo petshop",
+    quando: "Quando você cancela todos os atendimentos de um dia na agenda (feriado, imprevisto) e escolhe avisar os clientes.",
+    variaveis: [
+      V.saudacao, V.tutor, V.petshop, V.pet, V.servico, V.data, V.dia_semana, V.hora,
+      { chave: "motivo", descricao: "O motivo que você escreveu (some se ficar em branco)", exemplo: "Vamos fechar por causa do feriado de Finados." },
+      { chave: "link_agendar", descricao: "Link pra marcar outro horário", exemplo: "https://bubblepets.vercel.app/agendar/petshop" },
+    ],
+    padrao:
+      "{saudacao}, {tutor}! 🐾\n\nPrecisamos cancelar o horário do *{pet}* ({servico}) de {dia_semana}, {data} às {hora}.\n{motivo}\n\nPra escolher outro horário: {link_agendar}\n\nDesculpe o transtorno! 💜",
+    obrigatorias: [],
   },
   resposta_confirmado: {
     titulo: "Resposta: confirmou",

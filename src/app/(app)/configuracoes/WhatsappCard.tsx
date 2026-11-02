@@ -4,7 +4,7 @@ import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { DateTime } from "luxon";
 import { toast } from "sonner";
-import { Hash, MessageCircle, QrCode, RefreshCw, Send, Unplug } from "lucide-react";
+import { ChevronDown, Hash, MessageCircle, QrCode, RefreshCw, Send, Unplug } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -37,6 +37,11 @@ const TIPO_LABEL: Record<string, string> = {
   otp: "Código",
   fechamento: "Fechamento",
   relatorio: "Relatório",
+  retorno: "Retorno",
+  plano_sobrando: "Banho do plano",
+  pet_pronto: "Pet pronto",
+  fidelidade: "Fidelidade",
+  dia_cancelado: "Dia cancelado",
 };
 
 const POLL_MS = 3000;
@@ -73,6 +78,8 @@ export function WhatsappCard({
   const [fase, setFase] = useState<Fase>({ tipo: "idle" });
   const [erro, setErro] = useState<string | null>(null);
   const [confirmDesconectar, setConfirmDesconectar] = useState(false);
+  // O histórico fica recolhido: quase ninguém precisa dele no dia a dia.
+  const [verMensagens, setVerMensagens] = useState(false);
   const [isPending, startTransition] = useTransition();
   const [telefone, setTelefone] = useState(telefonePetshop ? formatPhoneBR(telefonePetshop) : "");
 
@@ -352,7 +359,16 @@ export function WhatsappCard({
 
         {mensagens.length > 0 && (
           <div className="flex flex-col gap-1.5">
-            <span className="text-xs font-medium text-muted-foreground">Últimas mensagens</span>
+            <button
+              type="button"
+              onClick={() => setVerMensagens((v) => !v)}
+              aria-expanded={verMensagens}
+              className="flex items-center gap-1 self-start text-xs font-medium text-muted-foreground hover:text-foreground"
+            >
+              <ChevronDown size={14} className={cn("transition-transform", verMensagens && "rotate-180")} />
+              {verMensagens ? "Ocultar últimas mensagens" : `Ver últimas mensagens (${mensagens.length})`}
+            </button>
+            {verMensagens && (
             <ul className="flex flex-col divide-y divide-border rounded-xl border border-border text-xs">
               {mensagens.map((m) => (
                 <li key={m.id} className="flex items-center justify-between gap-2 px-2.5 py-1.5">
@@ -381,6 +397,7 @@ export function WhatsappCard({
                 </li>
               ))}
             </ul>
+            )}
           </div>
         )}
       </CardContent>
