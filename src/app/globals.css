@@ -323,3 +323,65 @@
   display: block;
   width: 100%;
 }
+/* ───────── Landing page ─────────
+   Bolhas que sobem, cartões que flutuam, faixa que corre e blocos que
+   aparecem ao rolar. Tudo desliga com "reduzir movimento". */
+.lp-bubble {
+  border-radius: 9999px;
+  background: radial-gradient(circle at 30% 28%, rgb(255 255 255 / 0.95) 0 14%, rgb(196 181 253 / 0.45) 38%, rgb(124 58 237 / 0.18) 70%);
+  border: 1px solid rgb(255 255 255 / 0.8);
+  box-shadow: inset -2px -3px 6px rgb(124 58 237 / 0.18), 0 6px 18px -6px rgb(124 58 237 / 0.35);
+  animation: lp-bob 7s ease-in-out infinite;
+}
+
+.lp-float {
+  animation: lp-float 6s ease-in-out infinite;
+}
+
+.lp-marquee {
+  animation: lp-marquee 32s linear infinite;
+}
+
+.lp-fade-up {
+  animation: lp-fade-up 0.8s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+
+@keyframes lp-bob {
+  0%, 100% { transform: translateY(0) scale(1); }
+  50% { transform: translateY(-18px) scale(1.06); }
+}
+
+/* "translate" separado do "transform" pra não brigar com o rotate dos cartões. */
+@keyframes lp-float {
+  0%, 100% { translate: 0 0; }
+  50% { translate: 0 -12px; }
+}
+
+@keyframes lp-marquee {
+  to { transform: translateX(-100%); }
+}
+
+@keyframes lp-fade-up {
+  from { opacity: 0; translate: 0 24px; }
+  to { opacity: 1; translate: 0 0; }
+}
+
+/* Só esconde antes de entrar na tela se houver JS pra mostrar depois. */
+@media (scripting: enabled) and (prefers-reduced-motion: no-preference) {
+  .lp-reveal {
+    transition: opacity 0.8s cubic-bezier(0.2, 0.7, 0.2, 1), translate 0.8s cubic-bezier(0.2, 0.7, 0.2, 1);
+  }
+  .lp-reveal:not([data-visible]) {
+    opacity: 0;
+    translate: 0 32px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lp-bubble,
+  .lp-float,
+  .lp-marquee,
+  .lp-fade-up {
+    animation: none;
+  }
+}
