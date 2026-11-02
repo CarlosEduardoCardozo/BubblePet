@@ -19,6 +19,13 @@ export async function carregarConfigFidelidade(supabase: SupabaseClient, petshop
   return { ...FIDELIDADE_PADRAO, ...data } as FidelidadeConfig;
 }
 
+/** Mesma coisa, sem precisar saber o petshop: a RLS do usuário já limita à linha dele. Deixa a consulta rodar junto com as outras. */
+export async function carregarConfigFidelidadeDoUsuario(supabase: SupabaseClient): Promise<FidelidadeConfig> {
+  const { data } = await supabase.from("fidelidade_config").select("*").maybeSingle();
+  if (!data) return { ...FIDELIDADE_PADRAO, contar_desde: hojeSP() };
+  return { ...FIDELIDADE_PADRAO, ...data } as FidelidadeConfig;
+}
+
 const PAGINA = 1000;
 
 /**
@@ -65,9 +72,11 @@ export async function carregarCartoes(
 export async function cartaoDoTutor(
   supabase: SupabaseClient,
   petshopId: string,
-  tutorId: string
+  tutorId: string,
+  /** Se já foi carregada (em paralelo), evita buscar de novo. */
+  configPronta?: FidelidadeConfig
 ): Promise<{ config: FidelidadeConfig; cartao: Cartao | undefined }> {
-  const config = await carregarConfigFidelidade(supabase, petshopId);
+  const config = configPronta ?? (await carregarConfigFidelidade(supabase, petshopId));
   if (!config.ativo) return { config, cartao: undefined };
   const cartoes = await carregarCartoes(supabase, petshopId, config, tutorId);
   return { config, cartao: cartoes.get(tutorId) };

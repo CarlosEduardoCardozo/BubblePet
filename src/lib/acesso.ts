@@ -3,6 +3,7 @@ import "server-only";
 import { cache } from "react";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { usuarioAtual } from "@/lib/supabase/usuario";
 import { lerModulos, TODOS_MODULOS, type Modulo } from "@/lib/permissoes";
 
 export type Acesso = {
@@ -17,9 +18,7 @@ export type Acesso = {
 /** Usuário logado e o que ele pode ver (uma consulta por requisição). */
 export const acessoAtual = cache(async (): Promise<Acesso | null> => {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await usuarioAtual(supabase);
   if (!user) return null;
   const { data: perfil } = await supabase
     .from("perfis")
@@ -30,7 +29,7 @@ export const acessoAtual = cache(async (): Promise<Acesso | null> => {
   const dono = perfil.role === "dono";
   return {
     userId: user.id,
-    email: user.email ?? "",
+    email: user.email,
     nome: perfil.nome,
     petshopId: perfil.petshop_id,
     dono,

@@ -1,7 +1,7 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
-const PUBLIC_PREFIXES = ["/agendar", "/api"];
+const PUBLIC_PREFIXES = ["/agendar", "/api", "/enviar"];
 
 export async function updateSession(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request });
@@ -27,15 +27,15 @@ export async function updateSession(request: NextRequest) {
     }
   );
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  // Confere o login pela assinatura do token, sem ir ao servidor de autenticação.
+  const { data: claims } = await supabase.auth.getClaims();
+  const user = claims?.claims?.sub ? { id: claims.claims.sub } : null;
 
   const pathname = request.nextUrl.pathname;
   const isAuthRoute = pathname.startsWith("/login") || pathname.startsWith("/cadastro");
   // Link público de agendamento e route handlers não dependem da sessão do
-  // petshop: /agendar tem a própria sessão (cookie do tutor) e cada /api
-  // autentica sozinho.
+  // petshop: /agendar tem a própria sessão (cookie do tutor), /enviar vale pelo
+  // token do QR code e cada /api autentica sozinho.
   // A raiz é a landing page: aberta pra qualquer visitante.
   const isPublic =
     pathname === "/" ||

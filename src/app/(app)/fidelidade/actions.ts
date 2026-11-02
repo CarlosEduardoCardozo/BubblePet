@@ -7,7 +7,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getCurrentPetshopId } from "@/lib/supabase/petshop";
 import { mensagemErroBanco } from "@/lib/db-errors";
 import { contaCarimbo, hojeSP, valorComPremio, type Cartao } from "@/lib/fidelidade";
-import { cartaoDoTutor } from "@/lib/fidelidade-carregar";
+import { cartaoDoTutor, carregarConfigFidelidadeDoUsuario } from "@/lib/fidelidade-carregar";
 
 type ActionResult = { error: string } | { success: true };
 
@@ -107,18 +107,22 @@ type AgendamentoPremio = {
 
 async function lerAgendamento(id: string) {
   const supabase = await createClient();
-  const petshopId = await getCurrentPetshopId(supabase);
-  const { data } = await supabase
-    .from("agendamentos")
-    .select(
-      "id, inicio, status, origem_plano, servico_id, valor_centavos, fidelidade_resgate, fidelidade_valor_original, pets(tutor_id), servicos(preco_centavos), fechamentos(status, enviado_em)"
-    )
-    .eq("id", id)
-    .maybeSingle<AgendamentoPremio>();
+  // Três leituras que não dependem uma da outra: rodam juntas.
+  const [petshopId, { data }, configLida] = await Promise.all([
+    getCurrentPetshopId(supabase),
+    supabase
+      .from("agendamentos")
+      .select(
+        "id, inicio, status, origem_plano, servico_id, valor_centavos, fidelidade_resgate, fidelidade_valor_original, pets(tutor_id), servicos(preco_centavos), fechamentos(status, enviado_em)"
+      )
+      .eq("id", id)
+      .maybeSingle<AgendamentoPremio>(),
+    carregarConfigFidelidadeDoUsuario(supabase),
+  ]);
   if (!data) return null;
   const tutorId = um(data.pets as Um<{ tutor_id: string }>)?.tutor_id;
   if (!tutorId) return null;
-  const { config, cartao } = await cartaoDoTutor(supabase, petshopId, tutorId);
+  const { config, cartao } = await cartaoDoTutor(supabase, petshopId, tutorId, configLida);
   const fechamento = um(data.fechamentos as Um<{ status: string; enviado_em: string | null }>);
   const cobrado = !!fechamento && (fechamento.status === "pago" || !!fechamento.enviado_em);
   const valorAtual = data.valor_centavos ?? um(data.servicos as Um<{ preco_centavos: number }>)?.preco_centavos ?? 0;
@@ -147,10 +151,10 @@ async function lerAgendamento(id: string) {
 }
 
 export async function statusFidelidadeAgendamento(id: string): Promise<StatusFidelidade | { error: string }> {
-  const bloqueioPermissao = await semPermissao("agenda");
-  if (bloqueioPermissao) return bloqueioPermissao;
   try {
-    const lido = await lerAgendamento(id);
+    // A permissão é conferida junto com a leitura, não antes: uma rodada a menos.
+    const [bloqueioPermissao, lido] = await Promise.all([semPermissao("agenda"), lerAgendamento(id)]);
+    if (bloqueioPermissao) return bloqueioPermissao;
     if (!lido) return { error: "Agendamento não encontrado." };
     const { data, config, cartao, bloqueio, valorAtual } = lido;
     if (!config.ativo) return { ativo: false };
