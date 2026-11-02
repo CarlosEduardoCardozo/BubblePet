@@ -3,7 +3,7 @@
 import { useEffect, useState, useTransition } from "react";
 import { DateTime } from "luxon";
 import { toast } from "sonner";
-import { Plus, Sparkles } from "lucide-react";
+import { CalendarOff, Plus, Sparkles } from "lucide-react";
 import {
   Sheet,
   SheetContent,
@@ -13,10 +13,14 @@ import {
   SheetFooter,
 } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { FormSelect } from "@/components/shared/FormSelect";
+import { Alternar } from "@/components/shared/Alternar";
+import { nomeFeriado } from "@/lib/feriados-br";
+import { horasAtivas, rotuloHoras, type AvisosConfig } from "@/lib/avisos";
 import { Combobox } from "@/components/shared/Combobox";
 import { createClient } from "@/lib/supabase/client";
 import { formatCentavos } from "@/lib/currency";
@@ -60,6 +64,7 @@ export function NovoAgendamentoSheet({
   horario,
   ocupados,
   whatsappConectado,
+  avisos,
   onSaved,
 }: {
   open: boolean;
@@ -71,6 +76,7 @@ export function NovoAgendamentoSheet({
   horario: HorarioFuncionamento;
   ocupados: Ocupado[];
   whatsappConectado: boolean;
+  avisos: AvisosConfig;
   onSaved: () => void;
 }) {
   const [isPending, startTransition] = useTransition();
@@ -81,7 +87,12 @@ export function NovoAgendamentoSheet({
   const [hora, setHora] = useState("");
   const [planoInfo, setPlanoInfo] = useState<PlanoInfo | null | undefined>(undefined);
   const [usarPlano, setUsarPlano] = useState(true);
-  const [avisar, setAvisar] = useState(true);
+  // Já vem como o petshop configurou (confirmação e lembretes pré-ativados);
+  // aqui dá para desligar ou ajustar só para este agendamento.
+  const [avisar, setAvisar] = useState(avisos.confirmacao_ativa);
+  const [lembretesSel, setLembretesSel] = useState<number[]>(horasAtivas(avisos));
+  // Atender num dia fechado ou feriado: exceção consciente, só deste agendamento.
+  const [excecaoDia, setExcecaoDia] = useState(false);
   const [adicionais, setAdicionais] = useState<LinhaAdicional[]>([]);
   const [mostrarAdicionais, setMostrarAdicionais] = useState(false);
   const [repetir, setRepetir] = useState<"nao" | "semanal" | "quinzenal" | "mensal">("nao");
@@ -140,7 +151,9 @@ export function NovoAgendamentoSheet({
   const conflito =
     !!inicioEscolhido?.isValid &&
     !horarioCabe(inicioEscolhido, duracao, ocupados, horario.capacidade);
-  const diaFechado = !!data && !diaAberto(data, horario);
+  const foraDoExpediente = !!data && !diaAberto(data, horario);
+  const diaFechado = foraDoExpediente && !excecaoDia;
+  const motivoFechado = data ? nomeFeriado(data) : null;
 
   useEffect(() => {
     if (!petId || !servicoId || !data) {
@@ -273,6 +286,9 @@ export function NovoAgendamentoSheet({
       setCadastro(null);
       setRepetir("nao");
       setVezes("4");
+      setAvisar(avisos.confirmacao_ativa);
+      setLembretesSel(horasAtivas(avisos));
+      setExcecaoDia(false);
       setUltimo(null);
     }
     onOpenChange(next);
@@ -333,6 +349,8 @@ export function NovoAgendamentoSheet({
     formData.set("repetir", repetir);
     if (repetir !== "nao") formData.set("vezes", String(nVezes));
     if (whatsappConectado && avisar) formData.set("avisar", "on");
+    // Lembretes automáticos escolhidos para este agendamento ("24,4"; vazio = nenhum).
+    if (whatsappConectado) formData.set("lembretes", lembretesSel.join(","));
 
     startTransition(async () => {
       const result = usandoCredito
@@ -480,26 +498,64 @@ export function NovoAgendamentoSheet({
                 onChange={(event) => {
                   setData(event.target.value);
                   setHora("");
+                  setExcecaoDia(false);
                 }}
                 required
               />
             </div>
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="hora">Horário</Label>
-              <FormSelect
-                id="hora"
-                value={hora}
-                onValueChange={setHora}
-                placeholder={data ? "Escolha" : "Data primeiro"}
-                disabled={!data || diaFechado}
-                options={horariosOpcoes.map((h) => ({ value: h, label: h }))}
-              />
+              {excecaoDia && foraDoExpediente ? (
+                <Input
+                  id="hora"
+                  type="time"
+                  step={900}
+                  value={hora}
+                  onChange={(event) => setHora(event.target.value)}
+                  required
+                />
+              ) : (
+                <FormSelect
+                  id="hora"
+                  value={hora}
+                  onValueChange={setHora}
+                  placeholder={data ? "Escolha" : "Data primeiro"}
+                  disabled={!data || diaFechado}
+                  options={horariosOpcoes.map((h) => ({ value: h, label: h }))}
+                />
+              )}
             </div>
           </div>
 
+          {foraDoExpediente && (
+            <div className="flex items-start gap-3 rounded-xl border border-[#e8c45f] bg-sun/25 px-3 py-2.5 text-sm">
+              <CalendarOff size={18} className="mt-0.5 shrink-0 text-[#8a5a00]" />
+              <div className="flex flex-1 flex-col gap-1.5">
+                <span className="font-medium text-[#5c3d00]">
+                  {motivoFechado ? `${motivoFechado}: o petshop não abre.` : "O petshop não abre nesse dia."}
+                </span>
+                <span className="text-xs text-[#5c3d00]/80">
+                  {excecaoDia
+                    ? "Atendimento de exceção: escolha o horário que quiser. Vale só para este agendamento."
+                    : "Se vai atender mesmo assim, libere o dia só para este agendamento."}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setExcecaoDia((v) => !v);
+                    setError(null);
+                  }}
+                  className="self-start text-xs font-semibold text-primary underline"
+                >
+                  {excecaoDia ? "Voltar ao expediente" : "Atender mesmo assim"}
+                </button>
+              </div>
+            </div>
+          )}
+
           <p className="-mt-2 text-xs text-muted-foreground">
             {diaFechado
-              ? "O petshop não abre nesse dia."
+              ? "Escolha outro dia ou libere a exceção acima."
               : conflito
                 ? "Esse horário já está ocupado — escolha outro."
                 : fimEscolhido
@@ -603,21 +659,58 @@ export function NovoAgendamentoSheet({
           </div>
 
           {whatsappConectado && (
-            <label className="flex items-start gap-2.5 rounded-xl border border-border px-3 py-2.5 text-sm">
-              <input
-                type="checkbox"
-                checked={avisar}
-                onChange={(event) => setAvisar(event.target.checked)}
-                className="mt-0.5 size-4 accent-primary"
-              />
-              <span className="flex flex-col gap-0.5">
-                <span className="font-medium">Avisar o tutor pelo WhatsApp</span>
-                <span className="text-xs text-muted-foreground">
-                  Ele recebe os dados do agendamento com os botões Confirmar e Cancelar — a resposta
-                  muda a agenda sozinha.
+            <div className="flex flex-col gap-3 rounded-xl border border-border px-3 py-3 text-sm">
+              <label className="flex items-center justify-between gap-3">
+                <span className="flex flex-col gap-0.5">
+                  <span className="font-medium">Avisar o tutor ao marcar</span>
+                  <span className="text-xs text-muted-foreground">
+                    Ele recebe os dados do agendamento com os botões de confirmar e cancelar.
+                  </span>
                 </span>
-              </span>
-            </label>
+                <Alternar ligado={avisar} onChange={setAvisar} rotulo="Avisar o tutor ao marcar" />
+              </label>
+              <div className="flex flex-col gap-1.5 border-t border-border pt-3">
+                <span className="font-medium">Lembretes automáticos</span>
+                {avisos.lembretes.length === 0 ? (
+                  <span className="text-xs text-muted-foreground">
+                    Nenhum lembrete configurado. Crie em Configurações › Mensagens.
+                  </span>
+                ) : (
+                  <>
+                    <div className="flex flex-wrap gap-1.5">
+                      {avisos.lembretes.map((l) => {
+                        const ligado = lembretesSel.includes(l.horas);
+                        return (
+                          <button
+                            key={l.horas}
+                            type="button"
+                            aria-pressed={ligado}
+                            onClick={() =>
+                              setLembretesSel((atual) =>
+                                ligado ? atual.filter((h) => h !== l.horas) : [...atual, l.horas].sort((a, b) => b - a)
+                              )
+                            }
+                            className={cn(
+                              "rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors",
+                              ligado
+                                ? "border-primary bg-primary text-primary-foreground"
+                                : "border-border bg-white text-muted-foreground hover:text-foreground"
+                            )}
+                          >
+                            {rotuloHoras(l.horas)}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <span className="text-xs text-muted-foreground">
+                      {lembretesSel.length === 0
+                        ? "Este agendamento não recebe lembrete."
+                        : "Saem sozinhos nos horários escolhidos, enquanto o atendimento estiver marcado."}
+                    </span>
+                  </>
+                )}
+              </div>
+            </div>
           )}
 
           {error && (

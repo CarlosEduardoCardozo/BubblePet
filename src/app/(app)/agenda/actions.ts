@@ -9,7 +9,9 @@ import { createClient } from "@/lib/supabase/server";
 import { getCurrentPetshopId } from "@/lib/supabase/petshop";
 import { AGENDAMENTO_STATUSES, type AgendamentoStatus } from "@/lib/agendamento";
 import { mensagemErroBanco } from "@/lib/db-errors";
-import { notificarAgendamento } from "@/lib/agenda/notificar";
+import { notificarAgendamento, notificarDiaCancelado } from "@/lib/agenda/notificar";
+import { lerLembretes } from "@/lib/avisos";
+import { appUrl } from "@/lib/app-url";
 import { lerAdicionais, type Adicional } from "@/lib/adicionais";
 import { precoParaPorte } from "@/lib/servico-preco";
 import { normalizePhoneBR } from "@/lib/phone";
@@ -27,6 +29,20 @@ function avisarDepois(formData: FormData, petshopId: string, agendamentoId: stri
   after(async () => {
     await notificarAgendamento(petshopId, agendamentoId, "confirmacao");
   });
+}
+
+/**
+ * Lembretes escolhidos no formulário ("24,4"; vazio = nenhum). Sem o campo,
+ * vale o padrão do petshop, que o banco preenche sozinho.
+ */
+function lembretesDoFormulario(formData: FormData): { lembretes: number[] } | null {
+  const bruto = formData.get("lembretes");
+  if (bruto === null) return null;
+  const horas = String(bruto)
+    .split(",")
+    .filter(Boolean)
+    .map((h) => ({ horas: Number(h), ativo: true }));
+  return { lembretes: lerLembretes(horas).map((l) => l.horas) };
 }
 
 /**
@@ -123,6 +139,7 @@ async function criarAgendamentos(formData: FormData, usarPlano: boolean): Promis
   const servico = await servicoParaPet(supabase, dados.servico_id, dados.pet_id);
   if (!servico) return { error: "Serviço não encontrado" };
 
+  const avisosEscolhidos = lembretesDoFormulario(formData);
   const recorrenciaId = datas.length > 1 ? crypto.randomUUID() : null;
   const criados: string[] = [];
   const avisos: string[] = [];
@@ -147,6 +164,7 @@ async function criarAgendamentos(formData: FormData, usarPlano: boolean): Promis
         // O plano cobre o banho; os extras são cobrados à parte no fechamento.
         if (adicionais.length > 0) extras.adicionais = adicionais;
         if (recorrenciaId) extras.recorrencia_id = recorrenciaId;
+        if (avisosEscolhidos) extras.avisos = avisosEscolhidos;
         if (Object.keys(extras).length > 0) {
           await supabase.from("agendamentos").update(extras).eq("id", id);
         }
@@ -174,6 +192,7 @@ async function criarAgendamentos(formData: FormData, usarPlano: boolean): Promis
           valor_centavos: servico.precoCentavos,
           adicionais,
           recorrencia_id: recorrenciaId,
+          ...(avisosEscolhidos ? { avisos: avisosEscolhidos } : {}),
         })
         .select("id")
         .single();
@@ -434,4 +453,72 @@ export async function criarClienteEPet(
   revalidatePath("/agenda");
   revalidatePath("/tutores-pets");
   return { success: true, pet: { id: pet.id, nome: pet.nome, tutorId, tutorNome, porte: pet.porte } };
+}
+
+/** Troca os lembretes automáticos de um atendimento (lista de horas antes; vazia = nenhum). */
+export async function atualizarAvisos(id: string, horas: number[]): Promise<ActionResult> {
+  const bloqueio = await semPermissao("agenda");
+  if (bloqueio) return bloqueio;
+  const lembretes = lerLembretes(horas.map((h) => ({ horas: h, ativo: true }))).map((l) => l.horas);
+
+  const supabase = await createClient();
+  const { data: atual } = await supabase.from("agendamentos").select("id, status").eq("id", id).maybeSingle();
+  if (!atual) return { error: "Agendamento não encontrado." };
+  if (atual.status === "concluido" || atual.status === "cancelado" || atual.status === "faltou") {
+    return { error: "Esse atendimento já foi encerrado." };
+  }
+  const { error } = await supabase.from("agendamentos").update({ avisos: { lembretes } }).eq("id", id);
+  if (error) return { error: mensagemErroBanco(error) };
+  revalidatePath("/agenda");
+  return { success: true };
+}
+
+const MAX_CANCELAR_DIA = 100;
+
+/**
+ * Cancela todos os atendimentos marcados de um dia (feriado, imprevisto).
+ * O crédito do plano volta sozinho pelo gatilho do banco. Com `avisar`, cada
+ * tutor recebe o aviso no WhatsApp, com o motivo e o link pra remarcar.
+ */
+export async function cancelarDia(
+  dataISO: string,
+  opcoes: { avisar: boolean; motivo: string }
+): Promise<{ error: string } | { success: true; cancelados: number; avisados: boolean }> {
+  const bloqueio = await semPermissao("agenda");
+  if (bloqueio) return bloqueio;
+  const dia = DateTime.fromISO(dataISO, { zone: ZONE });
+  if (!dia.isValid) return { error: "Data inválida." };
+  const motivo = opcoes.motivo.trim().slice(0, 200);
+
+  const supabase = await createClient();
+  const petshopId = await getCurrentPetshopId(supabase);
+  const { data: lista, error: erroLer } = await supabase
+    .from("agendamentos")
+    .select("id")
+    .eq("petshop_id", petshopId)
+    .in("status", ["agendado", "confirmado"])
+    .gte("inicio", dia.startOf("day").toUTC().toISO()!)
+    .lt("inicio", dia.plus({ days: 1 }).startOf("day").toUTC().toISO()!);
+  if (erroLer) return { error: mensagemErroBanco(erroLer) };
+  const ids = (lista ?? []).map((a) => a.id);
+  if (ids.length === 0) return { error: "Não há atendimentos marcados nesse dia." };
+  if (ids.length > MAX_CANCELAR_DIA) return { error: `São ${ids.length} atendimentos: cancele em partes ou fale com o suporte.` };
+
+  const { error } = await supabase.from("agendamentos").update({ status: "cancelado" }).in("id", ids);
+  if (error) return { error: mensagemErroBanco(error) };
+
+  let avisados = false;
+  if (opcoes.avisar) {
+    const { data: petshop } = await supabase.from("petshops").select("slug").eq("id", petshopId).maybeSingle();
+    const linkAgendar = petshop?.slug ? `${await appUrl()}/agendar/${petshop.slug}` : "";
+    avisados = true;
+    after(async () => {
+      await notificarDiaCancelado(petshopId, ids, motivo, linkAgendar);
+    });
+  }
+
+  revalidatePath("/agenda");
+  revalidatePath("/dashboard");
+  revalidatePath("/hoje");
+  return { success: true, cancelados: ids.length, avisados };
 }

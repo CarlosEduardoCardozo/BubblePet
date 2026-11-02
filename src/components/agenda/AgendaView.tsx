@@ -32,6 +32,9 @@ import { horarioDoDia, ZONE, type HorarioFuncionamento } from "@/lib/agenda/slot
 import { moverAgendamento } from "@/app/(app)/agenda/actions";
 import { STATUS_COLORS, STATUS_LABELS, type AgendamentoStatus } from "@/lib/agendamento";
 import { lerAdicionais, type Adicional } from "@/lib/adicionais";
+import { lembretesDoAgendamento, type AvisosConfig } from "@/lib/avisos";
+import { CancelarDiaDialog } from "./CancelarDiaDialog";
+import type { ChegadaInicial } from "./ChegadaBloco";
 
 // Cores e rótulos moram em src/lib/agendamento.ts (módulo simples, usado
 // também por server components); re-exportados aqui pelos imports antigos.
@@ -71,6 +74,10 @@ export type AgendamentoEvent = {
   adicionais: Adicional[];
   /** Já entrou num extrato enviado ou pago: valores congelados. */
   cobrado: boolean;
+  /** Lembretes automáticos deste atendimento (horas antes); null = atendimento antigo, sem automático. */
+  lembretes: number[] | null;
+  /** Como o pet chegou (marcas, observação, fotos e vídeos), carregado junto com a agenda. */
+  chegada: ChegadaInicial;
 };
 
 function hm(valor: string): { hour: number; minute: number } {
@@ -108,17 +115,22 @@ export function AgendaView({
   servicos,
   horario,
   whatsappConectado,
+  avisos,
+  petshopId,
 }: {
   pets: PetOption[];
   tutores: TutorOption[];
   servicos: ServicoOption[];
   horario: HorarioFuncionamento;
   whatsappConectado: boolean;
+  avisos: AvisosConfig;
+  petshopId: string;
 }) {
   const calendarRef = useRef<FullCalendar>(null);
   const [events, setEvents] = useState<AgendamentoEvent[]>([]);
   const [carregando, setCarregando] = useState(true);
   const [novoSlot, setNovoSlot] = useState<{ start: Date } | null>(null);
+  const [cancelandoDia, setCancelandoDia] = useState(false);
   const [detalheId, setDetalheId] = useState<string | null>(null);
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [filters, setFilters] = useState<AgendaFiltersState>(EMPTY_FILTERS);
@@ -141,7 +153,7 @@ export function AgendaView({
     const { data, error } = await supabase
       .from("agendamentos")
       .select(
-        "id, inicio, fim, status, observacoes, pet_id, servico_id, origem_plano, valor_centavos, adicionais, pets(nome, tutores(nome)), servicos(nome), fechamentos(status, enviado_em)"
+        "id, inicio, fim, status, observacoes, pet_id, servico_id, origem_plano, valor_centavos, adicionais, avisos, pets(nome, tutores(nome)), servicos(nome), fechamentos(status, enviado_em), agendamento_chegada(condicoes, observacao, mostrar_tutor), agendamento_midias(id, caminho, tipo, criado_em)"
       )
       .gte("inicio", start.toISOString())
       .lt("inicio", end.toISOString())
@@ -162,6 +174,13 @@ export function AgendaView({
         const servico = row.servicos as unknown as { nome: string } | null;
         const fechamento = row.fechamentos as unknown as { status: string; enviado_em: string | null } | null;
         const extras = lerAdicionais(row.adicionais);
+        const chegadaBruta = row.agendamento_chegada as unknown;
+        const chegada = (Array.isArray(chegadaBruta) ? chegadaBruta[0] : chegadaBruta) as {
+          condicoes: string[];
+          observacao: string | null;
+          mostrar_tutor: boolean;
+        } | null;
+        const midias = ((row.agendamento_midias as unknown as { id: string; caminho: string; tipo: "foto" | "video"; criado_em: string }[]) ?? []).slice();
         return {
           id: row.id,
           status: row.status as AgendamentoStatus,
@@ -177,6 +196,15 @@ export function AgendaView({
           valorCentavos: row.valor_centavos,
           adicionais: extras.ok ? extras.adicionais : [],
           cobrado: !!fechamento && (fechamento.status === "pago" || !!fechamento.enviado_em),
+          lembretes: lembretesDoAgendamento(row.avisos),
+          chegada: {
+            condicoes: chegada?.condicoes ?? [],
+            observacao: chegada?.observacao ?? "",
+            mostrarTutor: chegada?.mostrar_tutor ?? false,
+            midias: midias
+              .sort((a, b) => a.criado_em.localeCompare(b.criado_em))
+              .map(({ id, caminho, tipo }) => ({ id, caminho, tipo })),
+          },
         };
       })
     );
@@ -320,6 +348,18 @@ export function AgendaView({
       (!filters.servicoId || event.servicoId === filters.servicoId)
   );
 
+  // Dias em que o petshop não abre somem da grade (a semana fica mais larga e
+  // legível), a não ser que exista um atendimento de exceção nesse dia.
+  // FullCalendar numera de 0 (domingo) a 6; luxon vai de 1 (segunda) a 7 (domingo).
+  const diasComAtendimento = new Set(
+    events.filter((e) => e.status !== "cancelado").map((e) => DateTime.fromISO(e.inicio).setZone(ZONE).weekday % 7)
+  );
+  const diasEscondidos = [1, 2, 3, 4, 5, 6, 7]
+    .filter((dia) => !horarioDoDia(horario, dia) && !diasComAtendimento.has(dia % 7))
+    .map((dia) => dia % 7);
+  // Nunca esconde a semana inteira.
+  const hiddenDays = diasEscondidos.length < 7 ? diasEscondidos : [];
+
   const detalhe = events.find((e) => e.id === detalheId) ?? null;
   const ocupados = events
     .filter((e) => e.status !== "cancelado" && e.status !== "faltou")
@@ -404,6 +444,7 @@ export function AgendaView({
             onToday={() => calendarRef.current?.getApi().today()}
             onChangeView={(view) => calendarRef.current?.getApi().changeView(view)}
             onTogglePainel={() => setPainelAberto((v) => !v)}
+            onCancelarDia={() => setCancelandoDia(true)}
           />
           <div className="min-h-0 flex-1 p-2 sm:p-3 [&_.fc]:h-full">
             <FullCalendar
@@ -413,6 +454,7 @@ export function AgendaView({
               initialView="timeGridWeek"
               headerToolbar={false}
               businessHours={businessHours}
+              hiddenDays={hiddenDays}
               locale={ptBrLocale}
               firstDay={1}
               slotMinTime={comFolga(horario.abertura, -1)}
@@ -476,6 +518,7 @@ export function AgendaView({
         horario={horario}
         ocupados={ocupados}
         whatsappConectado={whatsappConectado}
+        avisos={avisos}
         onSaved={() => {
           setNovoSlot(null);
           reload();
@@ -490,10 +533,33 @@ export function AgendaView({
         pets={pets}
         horario={horario}
         ocupados={ocupados}
+        avisos={avisos}
+        petshopId={petshopId}
+        whatsappConectado={whatsappConectado}
+        onAtualizado={reload}
         onChanged={() => {
           setDetalheId(null);
           reload();
         }}
+      />
+
+      <CancelarDiaDialog
+        open={cancelandoDia}
+        onOpenChange={setCancelandoDia}
+        data={selectedDate}
+        whatsappConectado={whatsappConectado}
+        atendimentos={events
+          .filter(
+            (e) =>
+              (e.status === "agendado" || e.status === "confirmado") &&
+              DateTime.fromISO(e.inicio).setZone(ZONE).hasSame(DateTime.fromJSDate(selectedDate).setZone(ZONE), "day")
+          )
+          .map((e) => ({
+            petNome: e.petNome,
+            tutorNome: e.tutorNome,
+            hora: DateTime.fromISO(e.inicio).setZone(ZONE).toFormat("HH:mm"),
+          }))}
+        onCancelado={reload}
       />
     </div>
   );

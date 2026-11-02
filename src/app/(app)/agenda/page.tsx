@@ -1,9 +1,13 @@
 import { createClient } from "@/lib/supabase/server";
 import { AgendaView } from "@/components/agenda/AgendaView";
 import { horarioDoPetshop } from "@/lib/agenda/slots";
+import { getCurrentPetshopId } from "@/lib/supabase/petshop";
+import { carregarAvisosConfig } from "@/lib/avisos";
 
 export default async function AgendaPage() {
   const supabase = await createClient();
+  const petshopId = await getCurrentPetshopId(supabase);
+  const avisos = await carregarAvisosConfig(supabase, petshopId);
 
   const [{ data: pets }, { data: tutores }, { data: servicos }, { data: petshop }] = await Promise.all([
     supabase
@@ -39,6 +43,8 @@ export default async function AgendaPage() {
       servicos={servicos ?? []}
       horario={horario}
       whatsappConectado={petshop?.whatsapp_status === "conectado"}
+      avisos={avisos}
+      petshopId={petshopId}
     />
   );
 }

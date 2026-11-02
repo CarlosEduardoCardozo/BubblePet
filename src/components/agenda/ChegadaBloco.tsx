@@ -1,79 +1,93 @@
 "use client";
 
-import { useEffect, useRef, useState, useTransition } from "react";
+import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import { toast } from "sonner";
-import { Camera, ClipboardList, Loader2, Trash2 } from "lucide-react";
+import { Camera, ClipboardList, Loader2, QrCode, Smartphone, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
 import { BALDE_REGISTROS, CONDICOES_CHEGADA, LIMITE_MIDIA_BYTES } from "@/lib/chegada";
-import {
-  carregarChegada,
-  registrarMidia,
-  removerMidia,
-  salvarChegada,
-  type DadosChegada,
-} from "@/app/(app)/agenda/chegada-actions";
+import { prepararArquivo } from "@/lib/midia-cliente";
+import { gerarEnvioCelular, registrarMidia, removerMidia, salvarChegada } from "@/app/(app)/agenda/chegada-actions";
 
-/** Reduz a foto no aparelho (máx. 1600 px, JPEG). Se o navegador não abrir o formato, manda como está. */
-async function prepararFoto(arquivo: File): Promise<{ blob: Blob; tipo: string; extensao: string }> {
-  try {
-    const bitmap = await createImageBitmap(arquivo);
-    const escala = Math.min(1, 1600 / Math.max(bitmap.width, bitmap.height));
-    const canvas = document.createElement("canvas");
-    canvas.width = Math.round(bitmap.width * escala);
-    canvas.height = Math.round(bitmap.height * escala);
-    canvas.getContext("2d")!.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
-    bitmap.close();
-    const blob = await new Promise<Blob | null>((ok) => canvas.toBlob(ok, "image/jpeg", 0.85));
-    if (blob) return { blob, tipo: "image/jpeg", extensao: "jpg" };
-  } catch {
-    /* segue com o arquivo original */
-  }
-  const extensao = arquivo.name.split(".").pop()?.toLowerCase() || "jpg";
-  return { blob: arquivo, tipo: arquivo.type || "image/jpeg", extensao };
-}
+export type MidiaChegada = { id: string; caminho: string; tipo: "foto" | "video" };
+export type ChegadaInicial = { condicoes: string[]; observacao: string; mostrarTutor: boolean; midias: MidiaChegada[] };
 
-/** Como o pet chegou: marcas rápidas, observação e fotos/vídeos do atendimento. */
-export function ChegadaBloco({ agendamentoId }: { agendamentoId: string }) {
-  const [dados, setDados] = useState<DadosChegada | null>(null);
-  const [condicoes, setCondicoes] = useState<string[]>([]);
-  const [observacao, setObservacao] = useState("");
-  const [mostrarTutor, setMostrarTutor] = useState(false);
+/** Como o pet chegou: marcas rápidas, observação e fotos/vídeos. Os dados já chegam com a agenda. */
+export function ChegadaBloco({
+  agendamentoId,
+  petshopId,
+  inicial,
+  onAtualizado,
+}: {
+  agendamentoId: string;
+  petshopId: string;
+  inicial: ChegadaInicial;
+  onAtualizado: () => void;
+}) {
+  const [condicoes, setCondicoes] = useState<string[]>(inicial.condicoes);
+  const [observacao, setObservacao] = useState(inicial.observacao);
+  const [mostrarTutor, setMostrarTutor] = useState(inicial.mostrarTutor);
   const [alterado, setAlterado] = useState(false);
+  const [midias, setMidias] = useState<MidiaChegada[]>(inicial.midias);
+  const [urls, setUrls] = useState<Record<string, string>>({});
   const [enviando, setEnviando] = useState(0);
+  const [qr, setQr] = useState<{ url: string; qrSvg: string; validadeMin: number } | null>(null);
+  const [qrAberto, setQrAberto] = useState(false);
+  const [recebidos, setRecebidos] = useState(0);
   const [isPending, startTransition] = useTransition();
   const entrada = useRef<HTMLInputElement>(null);
 
-  // O bloco aparece na hora; o que já foi registrado chega em seguida. Se a
-  // pessoa já mexeu, o que veio do servidor não sobrescreve o que ela marcou.
-  const mexeu = useRef(false);
-
+  // Endereços temporários das fotos, pedidos direto do navegador (uma ida só).
   useEffect(() => {
+    const faltando = midias.filter((m) => !urls[m.caminho]);
+    if (faltando.length === 0) return;
     let cancelado = false;
-    carregarChegada(agendamentoId).then((r) => {
-      if (cancelado || "error" in r) return;
-      setDados(r);
-      if (mexeu.current) return;
-      setCondicoes(r.condicoes);
-      setObservacao(r.observacao);
-      setMostrarTutor(r.mostrarTutor);
-    });
+    createClient()
+      .storage.from(BALDE_REGISTROS)
+      .createSignedUrls(faltando.map((m) => m.caminho), 3600)
+      .then(({ data }) => {
+        if (cancelado || !data) return;
+        setUrls((atual) => {
+          const novo = { ...atual };
+          for (const d of data) if (d.path && d.signedUrl) novo[d.path] = d.signedUrl;
+          return novo;
+        });
+      });
     return () => {
       cancelado = true;
     };
+  }, [midias, urls]);
+
+  const recarregarMidias = useCallback(async () => {
+    const { data } = await createClient()
+      .from("agendamento_midias")
+      .select("id, caminho, tipo")
+      .eq("agendamento_id", agendamentoId)
+      .order("criado_em");
+    if (data) setMidias(data as MidiaChegada[]);
+    return data?.length ?? 0;
   }, [agendamentoId]);
 
-  async function recarregarMidias() {
-    const r = await carregarChegada(agendamentoId);
-    if (!("error" in r)) setDados((atual) => (atual ? { ...atual, midias: r.midias } : r));
-  }
+  // Com o QR code aberto, confere de tempos em tempos o que chegou do celular.
+  const baseRecebidos = useRef(inicial.midias.length);
+  useEffect(() => {
+    if (!qrAberto) return;
+    baseRecebidos.current = midias.length;
+    const id = setInterval(async () => {
+      const total = await recarregarMidias();
+      setRecebidos(Math.max(0, total - baseRecebidos.current));
+    }, 4000);
+    return () => clearInterval(id);
+    // midias.length só vale na abertura; o intervalo recalcula sozinho.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [qrAberto, recarregarMidias]);
 
   function alternar(valor: string) {
-    mexeu.current = true;
     setCondicoes((c) => (c.includes(valor) ? c.filter((x) => x !== valor) : [...c, valor]));
     setAlterado(true);
   }
@@ -85,39 +99,33 @@ export function ChegadaBloco({ agendamentoId }: { agendamentoId: string }) {
       else {
         toast.success("Registro de chegada salvo.");
         setAlterado(false);
+        onAtualizado();
       }
     });
   }
 
   async function enviar(arquivos: FileList | null) {
-    if (!arquivos || !dados) return;
+    if (!arquivos) return;
     const supabase = createClient();
     for (const arquivo of Array.from(arquivos)) {
-      const video = arquivo.type.startsWith("video/");
-      if (!video && !arquivo.type.startsWith("image/")) {
-        toast.error(`${arquivo.name}: envie uma foto ou um vídeo.`);
-        continue;
-      }
       setEnviando((n) => n + 1);
       try {
-        const pronto = video
-          ? { blob: arquivo as Blob, tipo: arquivo.type, extensao: arquivo.name.split(".").pop()?.toLowerCase() || "mp4" }
-          : await prepararFoto(arquivo);
+        const pronto = await prepararArquivo(arquivo);
+        if (!pronto) {
+          toast.error(`${arquivo.name}: envie uma foto ou um vídeo.`);
+          continue;
+        }
         if (pronto.blob.size > LIMITE_MIDIA_BYTES) {
           toast.error("O vídeo passa de 50 MB. Grave um trecho mais curto.");
           continue;
         }
-        const caminho = `${dados.petshopId}/${agendamentoId}/${crypto.randomUUID()}.${pronto.extensao}`;
+        const caminho = `${petshopId}/${agendamentoId}/${crypto.randomUUID()}.${pronto.extensao}`;
         const { error } = await supabase.storage.from(BALDE_REGISTROS).upload(caminho, pronto.blob, { contentType: pronto.tipo });
         if (error) {
           toast.error("Não foi possível enviar o arquivo. Tente de novo.");
           continue;
         }
-        const r = await registrarMidia(agendamentoId, {
-          caminho,
-          tipo: video ? "video" : "foto",
-          tamanhoBytes: pronto.blob.size,
-        });
+        const r = await registrarMidia(agendamentoId, { caminho, tipo: pronto.midia, tamanhoBytes: pronto.blob.size });
         if ("error" in r) {
           await supabase.storage.from(BALDE_REGISTROS).remove([caminho]);
           toast.error(r.error);
@@ -127,6 +135,7 @@ export function ChegadaBloco({ agendamentoId }: { agendamentoId: string }) {
       }
     }
     await recarregarMidias();
+    onAtualizado();
     if (entrada.current) entrada.current.value = "";
   }
 
@@ -134,11 +143,27 @@ export function ChegadaBloco({ agendamentoId }: { agendamentoId: string }) {
     startTransition(async () => {
       const r = await removerMidia(id);
       if ("error" in r) toast.error(r.error);
-      else await recarregarMidias();
+      else {
+        await recarregarMidias();
+        onAtualizado();
+      }
     });
   }
 
-  const midias = dados?.midias ?? [];
+  function abrirQr() {
+    setQrAberto(true);
+    setRecebidos(0);
+    startTransition(async () => {
+      const r = await gerarEnvioCelular(agendamentoId);
+      if ("error" in r) {
+        toast.error(r.error);
+        setQrAberto(false);
+        return;
+      }
+      setQr(r);
+    });
+  }
+
   const temRegistro = condicoes.length > 0 || observacao.trim() !== "" || midias.length > 0;
 
   return (
@@ -147,11 +172,7 @@ export function ChegadaBloco({ agendamentoId }: { agendamentoId: string }) {
         <span className="flex items-center gap-2 font-medium">
           <ClipboardList size={15} className="text-primary" /> Como o pet chegou
         </span>
-        {!dados ? (
-          <Loader2 size={14} className="animate-spin text-muted-foreground" />
-        ) : (
-          !temRegistro && <span className="text-xs text-muted-foreground">nada registrado</span>
-        )}
+        {!temRegistro && <span className="text-xs text-muted-foreground">nada registrado</span>}
       </div>
 
       <div className="flex flex-wrap gap-1.5">
@@ -176,7 +197,6 @@ export function ChegadaBloco({ agendamentoId }: { agendamentoId: string }) {
       <Textarea
         value={observacao}
         onChange={(e) => {
-          mexeu.current = true;
           setObservacao(e.target.value);
           setAlterado(true);
         }}
@@ -188,13 +208,19 @@ export function ChegadaBloco({ agendamentoId }: { agendamentoId: string }) {
       <div className="flex flex-wrap gap-2">
         {midias.map((m) => (
           <div key={m.id} className="group relative size-20 overflow-hidden rounded-lg border border-border bg-muted">
-            {m.tipo === "foto" ? (
-              <a href={m.url} target="_blank" rel="noreferrer">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={m.url} alt="Foto da chegada" className="size-full object-cover" />
-              </a>
+            {urls[m.caminho] ? (
+              m.tipo === "foto" ? (
+                <a href={urls[m.caminho]} target="_blank" rel="noreferrer">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={urls[m.caminho]} alt="Foto da chegada" className="size-full object-cover" />
+                </a>
+              ) : (
+                <video src={urls[m.caminho]} controls preload="metadata" className="size-full object-cover" />
+              )
             ) : (
-              <video src={m.url} controls preload="metadata" className="size-full object-cover" />
+              <span className="flex size-full items-center justify-center text-muted-foreground">
+                <Loader2 size={16} className="animate-spin" />
+              </span>
             )}
             <button
               type="button"
@@ -215,26 +241,24 @@ export function ChegadaBloco({ agendamentoId }: { agendamentoId: string }) {
         <button
           type="button"
           onClick={() => entrada.current?.click()}
-          disabled={!dados}
-          className="flex size-20 flex-col items-center justify-center gap-1 rounded-lg border border-dashed border-primary/50 text-xs font-semibold text-primary hover:bg-primary/5 disabled:opacity-50"
+          className="flex size-20 flex-col items-center justify-center gap-1 rounded-lg border border-dashed border-primary/50 text-xs font-semibold text-primary hover:bg-primary/5"
         >
-          <Camera size={18} /> Foto ou vídeo
+          <Camera size={18} /> Deste aparelho
         </button>
-        <input
-          ref={entrada}
-          type="file"
-          accept="image/*,video/*"
-          multiple
-          className="hidden"
-          onChange={(e) => enviar(e.target.files)}
-        />
+        <button
+          type="button"
+          onClick={abrirQr}
+          className="flex size-20 flex-col items-center justify-center gap-1 rounded-lg border border-dashed border-primary/50 text-xs font-semibold text-primary hover:bg-primary/5"
+        >
+          <QrCode size={18} /> Pelo celular
+        </button>
+        <input ref={entrada} type="file" accept="image/*,video/*" multiple className="hidden" onChange={(e) => enviar(e.target.files)} />
       </div>
 
       <Label className="flex items-center gap-2 font-normal">
         <Checkbox
           checked={mostrarTutor}
           onCheckedChange={(v) => {
-            mexeu.current = true;
             setMostrarTutor(v === true);
             setAlterado(true);
           }}
@@ -247,6 +271,48 @@ export function ChegadaBloco({ agendamentoId }: { agendamentoId: string }) {
           {isPending ? "Salvando..." : "Salvar registro"}
         </Button>
       )}
+
+      <Dialog open={qrAberto} onOpenChange={setQrAberto}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Smartphone size={18} /> Enviar pelo celular
+            </DialogTitle>
+            <DialogDescription>
+              Aponte a câmera do celular para o QR code. Lá você tira foto, grava vídeo ou escolhe da galeria, sem precisar entrar na conta.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-col items-center gap-3">
+            {qr ? (
+              <div
+                className="rounded-2xl border border-border bg-white p-2 [&>svg]:size-56"
+                // O SVG é gerado pelo nosso servidor a partir do link, nunca de texto digitado.
+                dangerouslySetInnerHTML={{ __html: qr.qrSvg }}
+                aria-label="QR code para enviar fotos pelo celular"
+                role="img"
+              />
+            ) : (
+              <div className="flex size-60 items-center justify-center rounded-2xl border border-border bg-white">
+                <Loader2 className="animate-spin text-muted-foreground" />
+              </div>
+            )}
+            <p className="text-center text-xs text-muted-foreground">
+              {qr ? `Vale por ${qr.validadeMin} minutos e só serve para este atendimento.` : "Gerando o QR code..."}
+            </p>
+            <p className={cn("rounded-full px-3 py-1 text-xs font-semibold", recebidos > 0 ? "bg-emerald-100 text-emerald-700" : "bg-muted text-muted-foreground")}>
+              {recebidos > 0 ? `${recebidos} arquivo${recebidos === 1 ? "" : "s"} recebido${recebidos === 1 ? "" : "s"}` : "Aguardando o envio..."}
+            </p>
+            <div className="flex gap-2">
+              <Button variant="outline" size="sm" onClick={abrirQr} disabled={isPending}>
+                Gerar outro
+              </Button>
+              <Button size="sm" onClick={() => setQrAberto(false)}>
+                Pronto
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

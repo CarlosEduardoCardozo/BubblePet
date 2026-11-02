@@ -6,61 +6,14 @@ import { semPermissao } from "@/lib/acesso";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentPetshopId } from "@/lib/supabase/petshop";
 import { mensagemErroBanco } from "@/lib/db-errors";
+import QRCode from "qrcode";
 import { BALDE_REGISTROS, CONDICAO_VALORES } from "@/lib/chegada";
+import { criarTokenUpload } from "@/lib/upload-celular";
+import { appUrl } from "@/lib/app-url";
 
 type ActionResult = { error: string } | { success: true };
 
-export type MidiaChegada = { id: string; tipo: "foto" | "video"; url: string };
-export type DadosChegada = {
-  petshopId: string;
-  condicoes: string[];
-  observacao: string;
-  mostrarTutor: boolean;
-  midias: MidiaChegada[];
-};
-
 const idSchema = z.string().uuid();
-
-export async function carregarChegada(agendamentoId: string): Promise<DadosChegada | { error: string }> {
-  const bloqueio = await semPermissao("agenda");
-  if (bloqueio) return bloqueio;
-  if (!idSchema.safeParse(agendamentoId).success) return { error: "Atendimento inválido." };
-
-  const supabase = await createClient();
-  const petshopId = await getCurrentPetshopId(supabase);
-  const [{ data: chegada }, { data: midias }] = await Promise.all([
-    supabase
-      .from("agendamento_chegada")
-      .select("condicoes, observacao, mostrar_tutor")
-      .eq("agendamento_id", agendamentoId)
-      .maybeSingle(),
-    supabase
-      .from("agendamento_midias")
-      .select("id, caminho, tipo")
-      .eq("agendamento_id", agendamentoId)
-      .order("criado_em"),
-  ]);
-
-  const lista = midias ?? [];
-  const { data: assinadas } = lista.length
-    ? await supabase.storage.from(BALDE_REGISTROS).createSignedUrls(
-        lista.map((m) => m.caminho),
-        3600
-      )
-    : { data: [] };
-  const urlPorCaminho = new Map((assinadas ?? []).map((a) => [a.path, a.signedUrl]));
-
-  return {
-    petshopId,
-    condicoes: chegada?.condicoes ?? [],
-    observacao: chegada?.observacao ?? "",
-    mostrarTutor: chegada?.mostrar_tutor ?? false,
-    midias: lista.flatMap((m) => {
-      const url = urlPorCaminho.get(m.caminho);
-      return url ? [{ id: m.id, tipo: m.tipo as "foto" | "video", url }] : [];
-    }),
-  };
-}
 
 const chegadaSchema = z.object({
   condicoes: z.array(z.string()).transform((v) => Array.from(new Set(v.filter((c) => CONDICAO_VALORES.includes(c))))),
@@ -138,4 +91,23 @@ export async function removerMidia(midiaId: string): Promise<ActionResult> {
   const { error } = await supabase.from("agendamento_midias").delete().eq("id", midiaId);
   if (error) return { error: mensagemErroBanco(error) };
   return { success: true };
+}
+
+/** Link e QR code para enviar fotos e vídeos deste atendimento pelo celular. */
+export async function gerarEnvioCelular(
+  agendamentoId: string
+): Promise<{ error: string } | { url: string; qrSvg: string; validadeMin: number }> {
+  const bloqueio = await semPermissao("agenda");
+  if (bloqueio) return bloqueio;
+  if (!idSchema.safeParse(agendamentoId).success) return { error: "Atendimento inválido." };
+
+  const supabase = await createClient();
+  const petshopId = await getCurrentPetshopId(supabase);
+  const { data: ag } = await supabase.from("agendamentos").select("id").eq("id", agendamentoId).maybeSingle();
+  if (!ag) return { error: "Atendimento não encontrado." };
+
+  const token = await criarTokenUpload({ agendamentoId, petshopId });
+  const url = `${await appUrl()}/enviar/${token}`;
+  const qrSvg = await QRCode.toString(url, { type: "svg", margin: 1, width: 224, errorCorrectionLevel: "M" });
+  return { url, qrSvg, validadeMin: 30 };
 }

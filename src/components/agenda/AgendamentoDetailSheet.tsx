@@ -37,6 +37,8 @@ import {
 import { LembreteButton } from "./LembreteButton";
 import { FidelidadeBloco } from "./FidelidadeBloco";
 import { ChegadaBloco } from "./ChegadaBloco";
+import { AvisosBloco } from "./AvisosBloco";
+import type { AvisosConfig } from "@/lib/avisos";
 import {
   AdicionaisEditor,
   adicionaisDasLinhas,
@@ -53,6 +55,10 @@ export function AgendamentoDetailSheet({
   pets,
   horario,
   ocupados,
+  avisos,
+  petshopId,
+  whatsappConectado,
+  onAtualizado,
   onChanged,
 }: {
   open: boolean;
@@ -62,6 +68,11 @@ export function AgendamentoDetailSheet({
   pets: PetOption[];
   horario: HorarioFuncionamento;
   ocupados: Ocupado[];
+  avisos: AvisosConfig;
+  petshopId: string;
+  whatsappConectado: boolean;
+  /** Recarrega a agenda sem fechar a folha. */
+  onAtualizado?: () => void;
   onChanged: () => void;
 }) {
   const [isPending, startTransition] = useTransition();
@@ -265,7 +276,24 @@ export function AgendamentoDetailSheet({
                 <FidelidadeBloco key={`fidelidade-${dados.id}`} agendamentoId={dados.id} onChanged={onChanged} />
               )}
 
-              {dados.status !== "cancelado" && <ChegadaBloco key={`chegada-${dados.id}`} agendamentoId={dados.id} />}
+              {whatsappConectado && !encerrado && (
+                <AvisosBloco
+                  key={`avisos-${dados.id}`}
+                  agendamentoId={dados.id}
+                  inicioISO={dados.inicio}
+                  lembretes={dados.lembretes}
+                  opcoes={avisos.lembretes.map((l) => l.horas)}
+                  onAtualizado={() => onAtualizado?.()}
+                />
+              )}
+
+              {dados.status !== "cancelado" && <ChegadaBloco
+                  key={`chegada-${dados.id}`}
+                  agendamentoId={dados.id}
+                  petshopId={petshopId}
+                  inicial={dados.chegada}
+                  onAtualizado={() => onAtualizado?.()}
+                />}
 
               {editandoExtras ? (
                 <div className="flex flex-col gap-2 rounded-xl border border-border p-3">

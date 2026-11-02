@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronLeft, ChevronRight, PanelLeftClose, PanelLeftOpen } from "lucide-react";
+import { CalendarX, ChevronLeft, ChevronRight, PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { AGENDAMENTO_STATUSES, STATUS_COLORS, STATUS_LABELS } from "@/lib/agendamento";
@@ -16,6 +16,7 @@ export function AgendaToolbar({
   onToday,
   onChangeView,
   onTogglePainel,
+  onCancelarDia,
 }: {
   title: string;
   view: AgendaViewType;
@@ -25,6 +26,7 @@ export function AgendaToolbar({
   onToday: () => void;
   onChangeView: (view: AgendaViewType) => void;
   onTogglePainel: () => void;
+  onCancelarDia: () => void;
 }) {
   return (
     <div className="flex flex-wrap items-center gap-2 border-b border-border px-3 py-2 sm:px-4">
@@ -63,6 +65,16 @@ export function AgendaToolbar({
           </span>
         ))}
       </div>
+
+      <Button
+        variant="ghost"
+        size="sm"
+        onClick={onCancelarDia}
+        title="Cancela todos os atendimentos do dia selecionado"
+        className="text-muted-foreground"
+      >
+        <CalendarX size={15} /> Cancelar o dia
+      </Button>
 
       <div className="flex h-8 items-center gap-0.5 rounded-lg bg-muted p-0.5 lg:ml-2">
         {(
