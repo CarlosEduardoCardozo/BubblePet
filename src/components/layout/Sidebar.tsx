@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import { PawPrint } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { moduloDaRota } from "@/lib/permissoes";
-import { ADMIN_ITEM, EQUIPE_ITEM, NAV_ITEMS, type MenuAcesso } from "./nav-items";
+import { NAV_GRUPOS, type MenuAcesso } from "./nav-items";
 
 export function NavLinks({
   rail = false,
@@ -18,43 +18,67 @@ export function NavLinks({
   onNavigate?: () => void;
 }) {
   const pathname = usePathname();
-  const itens = [
-    ...NAV_ITEMS.filter((item) => {
+  const grupos = NAV_GRUPOS.map((grupo) => ({
+    ...grupo,
+    itens: grupo.itens.filter((item) => {
+      if (item.somenteDono) return menu.dono;
+      if (item.somenteAdmin) return menu.admin;
       const modulo = moduloDaRota(item.href);
       return !modulo || menu.modulos.includes(modulo);
     }),
-    ...(menu.dono ? [EQUIPE_ITEM] : []),
-    ...(menu.admin ? [ADMIN_ITEM] : []),
-  ];
+  })).filter((grupo) => grupo.itens.length > 0);
+
   return (
-    <nav className="flex flex-1 flex-col gap-1.5 px-2.5 py-2">
-      {itens.map(({ href, label, icon: Icon }) => {
-        const active = pathname.startsWith(href);
-        return (
-          <Link
-            key={href}
-            href={href}
-            onClick={onNavigate}
-            aria-label={label}
-            className={cn(
-              "flex h-11 items-center gap-3 overflow-hidden rounded-full px-[16px] text-sm font-semibold whitespace-nowrap transition-all duration-200",
-              active
-                ? "bg-brand"
-                : "text-muted-foreground hover:bg-white/80 hover:text-foreground"
-            )}
-          >
-            <Icon size={20} className="shrink-0" strokeWidth={active ? 2.2 : 1.9} />
-            <span
-              className={cn(
-                "transition-opacity duration-200",
-                rail && "opacity-0 group-hover/rail:opacity-100"
+    <nav className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto overflow-x-hidden px-2.5 py-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+      {grupos.map((grupo, i) => (
+        <div key={grupo.titulo ?? "principal"} className="flex flex-col gap-0.5">
+          {i > 0 && (
+            <div className="relative mt-2 flex h-6 items-center px-4">
+              {grupo.titulo && (
+                <span
+                  className={cn(
+                    "text-[11px] font-bold uppercase tracking-wider text-muted-foreground/70 transition-opacity duration-200",
+                    rail && "opacity-0 group-hover/rail:opacity-100"
+                  )}
+                >
+                  {grupo.titulo}
+                </span>
               )}
-            >
-              {label}
-            </span>
-          </Link>
-        );
-      })}
+              {/* No trilho fechado o título some: fica só um traço separando os grupos. */}
+              {rail && (
+                <span className="absolute inset-x-3 top-1/2 h-px bg-border transition-opacity duration-200 group-hover/rail:opacity-0" />
+              )}
+            </div>
+          )}
+          {grupo.itens.map(({ href, label, icon: Icon }) => {
+            const active = pathname.startsWith(href);
+            return (
+              <Link
+                key={href}
+                href={href}
+                onClick={onNavigate}
+                aria-label={label}
+                className={cn(
+                  "flex h-10 items-center gap-3 overflow-hidden rounded-full px-[16px] text-sm font-semibold whitespace-nowrap transition-all duration-200",
+                  active
+                    ? "bg-brand"
+                    : "text-muted-foreground hover:bg-white/80 hover:text-foreground"
+                )}
+              >
+                <Icon size={20} className="shrink-0" strokeWidth={active ? 2.2 : 1.9} />
+                <span
+                  className={cn(
+                    "transition-opacity duration-200",
+                    rail && "opacity-0 group-hover/rail:opacity-100"
+                  )}
+                >
+                  {label}
+                </span>
+              </Link>
+            );
+          })}
+        </div>
+      ))}
     </nav>
   );
 }
