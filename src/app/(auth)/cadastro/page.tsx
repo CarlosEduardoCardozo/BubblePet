@@ -20,7 +20,7 @@ export default function CadastroPage() {
       <div className="rounded-card glass p-7">
         <h1 className="text-3xl font-extrabold tracking-tight">Criar conta do petshop</h1>
         <p className="mt-1.5 text-[15px] font-medium text-muted-foreground">
-          Leva um minuto. Depois é só conectar o WhatsApp e cadastrar os serviços.
+          <strong className="text-foreground">5 dias grátis</strong>, sem cartão. Leva um minuto: depois é só conectar o WhatsApp e cadastrar os serviços.
         </p>
 
         <form action={formAction} className="mt-6 flex flex-col gap-4">

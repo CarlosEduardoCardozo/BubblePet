@@ -5,6 +5,9 @@ import { usuarioAtual } from "@/lib/supabase/usuario";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { Topbar } from "@/components/layout/Topbar";
 import { SuporteBanner } from "@/components/layout/SuporteBanner";
+import { TesteBanner } from "@/components/layout/TesteBanner";
+import { PrimeirosPassos } from "@/components/onboarding/PrimeirosPassos";
+import { situacaoDaConta } from "@/lib/teste";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { ehAdmin } from "@/lib/admin";
 import { lerModulos, TODOS_MODULOS } from "@/lib/permissoes";
@@ -25,7 +28,7 @@ export default async function AppLayout({
 
   const { data: perfil } = await supabase
     .from("perfis")
-    .select("nome, petshop_id, role, permissoes, ativo, ultimo_uso_em, petshops(nome, whatsapp_status)")
+    .select("nome, petshop_id, role, permissoes, ativo, ultimo_uso_em, petshops(nome, whatsapp_status, plano_status, teste_ate, onboarding)")
     .eq("id", user.id)
     .single();
 
@@ -34,7 +37,11 @@ export default async function AppLayout({
   const petshop = perfil?.petshops as unknown as {
     nome: string;
     whatsapp_status: string;
+    plano_status: string;
+    teste_ate: string | null;
+    onboarding: Record<string, unknown> | null;
   } | null;
+  const situacao = situacaoDaConta(petshop?.plano_status, petshop?.teste_ate);
 
   // Com a conta congelada, current_petshop_id() devolve null e as RLS
   // escondem o petshop — aí confere o status direto e manda pra tela de
@@ -49,6 +56,8 @@ export default async function AppLayout({
   }
 
   const suporte = await lerSuporte(user.id);
+  // Teste e tolerância acabaram: bloqueia até assinar (o admin em modo suporte passa).
+  if (situacao.tipo === "expirado" && !suporte && !ehAdmin(user.email)) redirect("/assinar");
   const dono = perfil?.role === "dono";
   const menu = {
     // No modo suporte o admin vê exatamente o que o usuário vê.
@@ -67,6 +76,7 @@ export default async function AppLayout({
   return (
     <div className="flex min-h-screen flex-col">
       {suporte && <SuporteBanner usuario={suporte.alvoNome} petshop={suporte.petshopNome} />}
+      {!suporte && <TesteBanner situacao={situacao} />}
       <div className="flex min-h-0 flex-1">
         <Sidebar menu={menu} />
         <div className="flex min-w-0 flex-1 flex-col">
@@ -79,6 +89,9 @@ export default async function AppLayout({
           <main className="flex-1 px-4 pt-2 pb-10 md:px-8 lg:pr-10 lg:pl-4">{children}</main>
         </div>
       </div>
+      {!suporte && petshop?.plano_status === "teste" && (
+        <PrimeirosPassos diasDeTeste={situacao.tipo === "teste" ? situacao.diasRestantes : null} />
+      )}
     </div>
   );
 }

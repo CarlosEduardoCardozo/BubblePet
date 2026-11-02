@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { normalizePhoneBR } from "@/lib/phone";
 import { slugify, slugValido } from "@/lib/slug";
+import { prazoDoTeste } from "@/lib/teste";
 
 const schema = z.object({
   nome: z.string().trim().min(2, "Informe seu nome"),
@@ -28,6 +29,31 @@ async function slugDisponivel(nome: string): Promise<string> {
     if (!data) return candidato;
   }
   return `${base.slice(0, 30)}-${crypto.randomUUID().slice(0, 6)}`;
+}
+
+/** Cria o lead (ou atualiza o que já veio da landing, pelo telefone) na etapa "teste". */
+async function registrarLeadDoCadastro(
+  db: ReturnType<typeof createAdminClient>,
+  d: { nome: string; telefone: string | null; email: string; petshopNome: string; petshopId: string }
+) {
+  const existente = d.telefone
+    ? (await db.from("leads").select("id").eq("telefone", d.telefone).maybeSingle()).data
+    : null;
+  const campos = {
+    nome: d.nome,
+    email: d.email,
+    petshop_nome: d.petshopNome,
+    petshop_id: d.petshopId,
+    etapa: "teste",
+    atualizado_em: new Date().toISOString(),
+  };
+  if (existente) {
+    await db.from("leads").update(campos).eq("id", existente.id);
+    await db.from("leads_historico").insert({ lead_id: existente.id, tipo: "etapa", texto: "Criou a conta e começou o teste grátis." });
+    return;
+  }
+  const { data: novo } = await db.from("leads").insert({ ...campos, telefone: d.telefone, origem: "cadastro" }).select("id").single();
+  if (novo) await db.from("leads_historico").insert({ lead_id: novo.id, tipo: "etapa", texto: "Criou a conta e começou o teste grátis." });
 }
 
 /**
@@ -77,7 +103,14 @@ export async function cadastrar(_prev: CadastroState, formData: FormData): Promi
 
   const { data: petshop, error: erroPetshop } = await db
     .from("petshops")
-    .insert({ nome: d.petshop, telefone, slug: await slugDisponivel(d.petshop) })
+    // Conta nova nasce em teste grátis, com o prazo já gravado.
+    .insert({
+      nome: d.petshop,
+      telefone,
+      slug: await slugDisponivel(d.petshop),
+      plano_status: "teste",
+      teste_ate: prazoDoTeste(),
+    })
     .select("id")
     .single();
   if (erroPetshop || !petshop) {
@@ -92,6 +125,13 @@ export async function cadastrar(_prev: CadastroState, formData: FormData): Promi
     await db.from("petshops").delete().eq("id", petshop.id);
     await db.auth.admin.deleteUser(userId);
     return { error: "Não foi possível criar a conta. Tente de novo." };
+  }
+
+  // Entra no CRM como lead em teste. Falha aqui nunca derruba o cadastro.
+  try {
+    await registrarLeadDoCadastro(db, { nome: d.nome, telefone, email: d.email, petshopNome: d.petshop, petshopId: petshop.id });
+  } catch (e) {
+    console.error("Não foi possível registrar o lead do cadastro", e);
   }
 
   const supabase = await createClient();

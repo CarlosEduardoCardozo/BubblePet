@@ -47,7 +47,7 @@ export default async function AdminPage() {
   ] = await Promise.all([
     db
       .from("petshops")
-      .select("id, nome, slug, telefone, status, congelado_em, criado_em, whatsapp_status")
+      .select("id, nome, slug, telefone, status, congelado_em, criado_em, whatsapp_status, plano_status, teste_ate")
       .order("criado_em", { ascending: false }),
     db.from("perfis").select("id, nome, petshop_id, role, ativo, ultimo_uso_em").order("criado_em"),
     db.from("tutores").select("petshop_id").eq("ativo", true),
@@ -92,6 +92,8 @@ export default async function AdminPage() {
       nome: p.nome,
       slug: p.slug,
       status: p.status as "ativo" | "congelado",
+      planoStatus: p.plano_status as "teste" | "assinante",
+      testeAte: p.teste_ate as string | null,
       criadoEm: p.criado_em,
       whatsappConectado: p.whatsapp_status === "conectado",
       usuarios: equipe,
