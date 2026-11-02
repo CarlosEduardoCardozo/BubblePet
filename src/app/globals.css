@@ -377,7 +377,68 @@
   }
 }
 
+/* Loader da plataforma (Entrar já logado → painel). */
+.lp-loader {
+  animation: lp-loader-in 0.35s ease-out both;
+}
+
+.lp-rise {
+  animation: lp-rise 3.2s ease-in infinite;
+}
+
+.lp-pulse {
+  animation: lp-pulse 1.6s ease-in-out infinite;
+}
+
+.lp-ping {
+  animation: lp-ping 1.6s cubic-bezier(0, 0, 0.2, 1) infinite;
+}
+
+.lp-dot {
+  animation: lp-dot 1s ease-in-out infinite;
+}
+
+.lp-bar {
+  animation: lp-bar 1.3s ease-in-out infinite;
+}
+
+@keyframes lp-loader-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes lp-rise {
+  0% { transform: translateY(0) scale(0.8); opacity: 0; }
+  15% { opacity: 1; }
+  100% { transform: translateY(-110vh) scale(1.1); opacity: 0; }
+}
+
+@keyframes lp-pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.06); }
+}
+
+@keyframes lp-ping {
+  0% { transform: scale(1); opacity: 0.8; }
+  100% { transform: scale(1.6); opacity: 0; }
+}
+
+@keyframes lp-dot {
+  0%, 100% { opacity: 0.3; transform: translateY(0); }
+  50% { opacity: 1; transform: translateY(-3px); }
+}
+
+@keyframes lp-bar {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(300%); }
+}
+
 @media (prefers-reduced-motion: reduce) {
+  .lp-rise,
+  .lp-pulse,
+  .lp-ping,
+  .lp-dot,
+  .lp-bar,
   .lp-bubble,
   .lp-float,
   .lp-marquee,

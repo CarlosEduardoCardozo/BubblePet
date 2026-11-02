@@ -20,6 +20,7 @@ import {
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { Reveal } from "@/components/landing/Reveal";
+import { EntrarLink } from "@/components/landing/EntrarLink";
 import {
   AgendaCard,
   ChegadaCard,
@@ -172,10 +173,8 @@ export default function LandingPage() {
             ))}
           </nav>
           <div className="flex items-center gap-1.5">
-            <Link href="/login" className={cn(buttonVariants({ variant: "ghost" }), "hidden sm:inline-flex")}>
-              Entrar
-            </Link>
-            <Link href="/cadastro" className={buttonVariants({ size: "lg" })}>
+            <EntrarLink className={cn(buttonVariants({ variant: "ghost" }), "max-sm:px-3")} />
+            <Link href="/cadastro" className={cn(buttonVariants({ size: "lg" }), "max-sm:h-10 max-sm:px-4")}>
               Criar conta
             </Link>
           </div>
@@ -488,12 +487,9 @@ export default function LandingPage() {
                 <Link href="/cadastro" className={cn(buttonVariants({ size: "lg" }), "h-13 px-8 text-base")}>
                   Criar conta do petshop <ArrowRight />
                 </Link>
-                <Link
-                  href="/login"
-                  className="inline-flex h-13 items-center rounded-full border-2 border-[#3d2c00]/20 px-8 text-base font-bold transition-colors hover:bg-white/40"
-                >
+                <EntrarLink className="inline-flex h-13 items-center rounded-full border-2 border-[#3d2c00]/20 px-8 text-base font-bold transition-colors hover:bg-white/40">
                   Já tenho conta
-                </Link>
+                </EntrarLink>
               </div>
             </div>
           </Reveal>
@@ -510,9 +506,7 @@ export default function LandingPage() {
                 {n.label}
               </a>
             ))}
-            <Link href="/login" className="hover:text-foreground">
-              Entrar
-            </Link>
+            <EntrarLink className="hover:text-foreground" />
           </nav>
           <p className="text-sm text-muted-foreground">© {new Date().getFullYear()} BubblePet</p>
         </div>
