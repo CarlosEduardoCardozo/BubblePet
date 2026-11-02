@@ -21,6 +21,7 @@ import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { Reveal } from "@/components/landing/Reveal";
 import { EntrarLink } from "@/components/landing/EntrarLink";
+import { LinkGratisForm } from "@/components/landing/LinkGratisForm";
 import {
   AgendaCard,
   ChegadaCard,
@@ -37,6 +38,7 @@ export const metadata: Metadata = {
 
 const NAV = [
   { href: "#recursos", label: "Recursos" },
+  { href: "#link-gratis", label: "Link grátis" },
   { href: "#tutor", label: "Para o tutor" },
   { href: "#como-funciona", label: "Como funciona" },
   { href: "#duvidas", label: "Dúvidas" },
@@ -222,10 +224,10 @@ export default function LandingPage() {
                   Criar conta do petshop <ArrowRight />
                 </Link>
                 <a
-                  href="#recursos"
+                  href="#link-gratis"
                   className={cn(buttonVariants({ variant: "outline", size: "lg" }), "h-13 px-7 text-base")}
                 >
-                  Ver recursos
+                  Criar link grátis
                 </a>
               </div>
               <ul className="lp-fade-up mt-8 flex flex-wrap gap-x-6 gap-y-2 text-sm font-semibold text-muted-foreground [animation-delay:320ms]">
@@ -412,6 +414,45 @@ export default function LandingPage() {
                 </div>
               </Reveal>
             </div>
+          </div>
+        </section>
+
+        {/* ───────── Link grátis (freemium) ───────── */}
+        <section id="link-gratis" className="scroll-mt-28 px-4 pb-24 sm:pb-32">
+          <div className="mx-auto grid max-w-6xl items-start gap-10 lg:grid-cols-[1fr_1.1fr] lg:gap-16">
+            <Reveal className="lg:sticky lg:top-28">
+              <span className="inline-flex items-center gap-2 rounded-full bg-sun px-3.5 py-1.5 text-sm font-extrabold">
+                <Sparkles size={14} /> Grátis, sem cartão e sem senha
+              </span>
+              <h2 className="mt-5 text-4xl leading-[1.05] font-black tracking-[-0.03em] sm:text-5xl">
+                Seu link de agendamento <span className="text-primary">em 30 segundos.</span>
+              </h2>
+              <p className="mt-5 max-w-lg text-lg font-medium text-muted-foreground">
+                Informe o nome do petshop, seu WhatsApp e os serviços. Você recebe um link pra colocar na bio do
+                Instagram e mandar pros clientes. Cada pedido chega no seu WhatsApp, avisado pelo BubblePet.
+              </p>
+              <ul className="mt-8 flex flex-col gap-3">
+                {[
+                  { icon: Link2, t: "Link com o nome do seu petshop" },
+                  { icon: MessageCircle, t: "Pedidos avisados no seu WhatsApp, na hora" },
+                  { icon: Smartphone, t: "Página com todos os pedidos, pra consultar quando quiser" },
+                  { icon: CalendarDays, t: "Quando quiser agenda completa, o link continua o mesmo" },
+                ].map(({ icon: Icon, t }) => (
+                  <li key={t} className="flex items-center gap-3 font-semibold">
+                    <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-secondary text-primary">
+                      <Icon size={17} />
+                    </span>
+                    {t}
+                  </li>
+                ))}
+              </ul>
+            </Reveal>
+            <Reveal delay={100} className="relative">
+              <div aria-hidden className="absolute -inset-3 -z-10 rotate-2 rounded-[40px] bg-brand opacity-90" />
+              <div className="rounded-[32px] glass p-6 sm:p-8">
+                <LinkGratisForm />
+              </div>
+            </Reveal>
           </div>
         </section>
 

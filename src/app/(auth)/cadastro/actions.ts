@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { normalizePhoneBR } from "@/lib/phone";
-import { slugify, slugValido } from "@/lib/slug";
+import { linkPorToken, slugLivre } from "@/lib/link-gratis/servidor";
 
 const schema = z.object({
   nome: z.string().trim().min(2, "Informe seu nome"),
@@ -16,19 +16,6 @@ const schema = z.object({
 });
 
 export type CadastroState = { error?: string } | undefined;
-
-/** Slug livre a partir do nome: "petshop-araquari", "petshop-araquari-2"... */
-async function slugDisponivel(nome: string): Promise<string> {
-  const db = createAdminClient();
-  let base = slugify(nome);
-  if (!slugValido(base)) base = "petshop";
-  for (let i = 1; i <= 20; i++) {
-    const candidato = i === 1 ? base : `${base.slice(0, 36)}-${i}`;
-    const { data } = await db.from("petshops").select("id").eq("slug", candidato).maybeSingle();
-    if (!data) return candidato;
-  }
-  return `${base.slice(0, 30)}-${crypto.randomUUID().slice(0, 6)}`;
-}
 
 /**
  * Conta nova liberada na hora: cria o usuário (e-mail já confirmado), o
@@ -55,6 +42,11 @@ export async function cadastrar(_prev: CadastroState, formData: FormData): Promi
     if (!telefone) return { error: "WhatsApp inválido. Use DDD + número." };
   }
 
+  // Upgrade do link grátis: o petshop herda o endereço (/agendar/<slug>).
+  const tokenLink = String(formData.get("link") ?? "").trim();
+  const linkGratis = tokenLink ? await linkPorToken(tokenLink) : null;
+  const herdaLink = linkGratis && !linkGratis.petshopId ? linkGratis : null;
+
   const db = createAdminClient();
   const { data: criado, error: erroUsuario } = await db.auth.admin.createUser({
     email: d.email,
@@ -77,7 +69,11 @@ export async function cadastrar(_prev: CadastroState, formData: FormData): Promi
 
   const { data: petshop, error: erroPetshop } = await db
     .from("petshops")
-    .insert({ nome: d.petshop, telefone, slug: await slugDisponivel(d.petshop) })
+    .insert({
+      nome: d.petshop,
+      telefone: telefone ?? herdaLink?.whatsapp ?? null,
+      slug: herdaLink?.slug ?? (await slugLivre(d.petshop)),
+    })
     .select("id")
     .single();
   if (erroPetshop || !petshop) {
@@ -92,6 +88,14 @@ export async function cadastrar(_prev: CadastroState, formData: FormData): Promi
     await db.from("petshops").delete().eq("id", petshop.id);
     await db.auth.admin.deleteUser(userId);
     return { error: "Não foi possível criar a conta. Tente de novo." };
+  }
+
+  if (herdaLink) {
+    await db
+      .from("links_gratis")
+      .update({ petshop_id: petshop.id, convertido_em: new Date().toISOString() })
+      .eq("id", herdaLink.id)
+      .is("petshop_id", null);
   }
 
   const supabase = await createClient();
