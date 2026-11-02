@@ -21,6 +21,7 @@ import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { Reveal } from "@/components/landing/Reveal";
 import { EntrarLink } from "@/components/landing/EntrarLink";
+import { LeadForm } from "@/components/landing/LeadForm";
 import {
   AgendaCard,
   ChegadaCard,
@@ -469,6 +470,19 @@ export default function LandingPage() {
           </div>
         </section>
 
+        {/* ───────── Prefere conversar? ───────── */}
+        <section id="contato" className="scroll-mt-28 px-4 pb-24 sm:pb-28">
+          <div className="mx-auto max-w-3xl text-center">
+            <h2 className="text-3xl font-black tracking-[-0.03em] sm:text-4xl">
+              Prefere conversar <span className="text-primary">antes?</span>
+            </h2>
+            <p className="mx-auto mt-3 mb-8 max-w-xl text-base font-semibold text-muted-foreground">
+              Deixe seu WhatsApp e a gente te mostra o BubblePet funcionando, sem pressa.
+            </p>
+            <LeadForm />
+          </div>
+        </section>
+
         {/* ───────── CTA final ───────── */}
         <section className="px-4 pb-16">
           <Reveal className="relative mx-auto max-w-6xl overflow-hidden rounded-[44px] bg-sun px-6 py-16 text-center sm:px-14 sm:py-20">
@@ -481,7 +495,7 @@ export default function LandingPage() {
                 Bora deixar o petshop no ritmo certo?
               </h2>
               <p className="mt-5 text-lg font-semibold opacity-80">
-                Crie a conta, conecte o WhatsApp e compartilhe seu link de agendamento ainda hoje.
+                <strong>5 dias grátis</strong>, sem cartão: crie a conta, conecte o WhatsApp e compartilhe seu link de agendamento ainda hoje.
               </p>
               <div className="mt-9 flex flex-wrap justify-center gap-3">
                 <Link href="/cadastro" className={cn(buttonVariants({ size: "lg" }), "h-13 px-8 text-base")}>

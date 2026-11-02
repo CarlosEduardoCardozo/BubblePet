@@ -18,8 +18,8 @@ export class UazapiError extends Error {
   }
 }
 
-function baseUrl(): string {
-  const url = process.env.UAZAPI_BASE_URL;
+function baseUrl(override?: string): string {
+  const url = override || process.env.UAZAPI_BASE_URL;
   if (!url) throw new Error("UAZAPI_BASE_URL não configurada.");
   return url.replace(/\/$/, "");
 }
@@ -31,13 +31,15 @@ async function request<T>(
     token?: string;
     adminToken?: string;
     body?: unknown;
+    /** Outro servidor da UAZAPI (ex.: o número da plataforma, configurado no admin). */
+    servidor?: string;
   }
 ): Promise<T> {
   const headers: Record<string, string> = { "content-type": "application/json" };
   if (init.token) headers.token = init.token;
   if (init.adminToken) headers.admintoken = init.adminToken;
 
-  const response = await fetch(`${baseUrl()}${path}`, {
+  const response = await fetch(`${baseUrl(init.servidor)}${path}`, {
     method: init.method ?? "POST",
     headers,
     body: init.body === undefined ? undefined : JSON.stringify(init.body),
@@ -113,7 +115,7 @@ export type StatusInstancia = {
   qrcode: string | null;
 };
 
-export async function statusInstancia(token: string): Promise<StatusInstancia> {
+export async function statusInstancia(token: string, servidor?: string): Promise<StatusInstancia> {
   const data = await request<{
     instance?: InstanciaBruta;
     status?: {
@@ -121,7 +123,7 @@ export async function statusInstancia(token: string): Promise<StatusInstancia> {
       loggedIn?: boolean;
       jid?: { user?: string } | string | null;
     };
-  }>("/instance/status", { method: "GET", token });
+  }>("/instance/status", { method: "GET", token, servidor });
 
   // JID vem como "554799217533:20@s.whatsapp.net" — o ":20" é o id do
   // aparelho conectado, não faz parte do número.
@@ -146,10 +148,12 @@ export async function desconectar(token: string): Promise<void> {
 export async function enviarTexto(
   token: string,
   numeroE164: string,
-  texto: string
+  texto: string,
+  servidor?: string
 ): Promise<void> {
   await request("/send/text", {
     token,
+    servidor,
     body: { number: paraNumeroUazapi(numeroE164), text: texto },
   });
 }
