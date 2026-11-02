@@ -36,7 +36,10 @@ export async function updateSession(request: NextRequest) {
   // Link público de agendamento e route handlers não dependem da sessão do
   // petshop: /agendar tem a própria sessão (cookie do tutor) e cada /api
   // autentica sozinho.
-  const isPublic = PUBLIC_PREFIXES.some((p) => pathname === p || pathname.startsWith(`${p}/`));
+  // A raiz é a landing page: aberta pra qualquer visitante.
+  const isPublic =
+    pathname === "/" ||
+    PUBLIC_PREFIXES.some((p) => pathname === p || pathname.startsWith(`${p}/`));
 
   if (!user && !isAuthRoute && !isPublic) {
     const url = request.nextUrl.clone();
