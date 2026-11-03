@@ -25,7 +25,7 @@
  */
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { chromium, type Browser, type Locator, type Page } from "playwright";
 import { createClient } from "@supabase/supabase-js";
@@ -468,7 +468,9 @@ export async function rodar(roteiros: Roteiro[], opcoes: { login: boolean; demo:
       }
       const g = await gravar(browser, roteiro, estado);
       const arquivo = montar(roteiro, g);
-      console.log(`  ✔ vídeo: ${resolve(arquivo)}`);
+      // A gravação crua (sem som) só servia pra montagem: some pra não confundir.
+      rmSync(join(SAIDA, "bruto", roteiro.chave), { recursive: true, force: true });
+      console.log(`  ✔ vídeo com narração: ${resolve(arquivo)}`);
       if (opcoes.publicar) await publicar(roteiro, arquivo);
       resumo.push(`${g.avisos.length ? "⚠" : "✔"} ${roteiro.titulo}${g.avisos.length ? ` (${g.avisos.length} passos com aviso)` : ""}`);
     }
