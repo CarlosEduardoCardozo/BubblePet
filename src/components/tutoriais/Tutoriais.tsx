@@ -131,19 +131,25 @@ export function AjudaVideo({ topico, className }: { topico?: string; className?:
   const rotulo = videos.length === 1 ? `Ver tutorial: ${videos[0].titulo}` : `Ver ${videos.length} tutoriais desta tela`;
   return (
     <>
+      {/* Discreto: só o "?" em cinza; no hover (ou foco pelo teclado) fica roxo
+          e abre o rótulo "Ver tutorial". */}
       <button
         type="button"
         onClick={() => setAberto(true)}
         aria-label={rotulo}
         title={rotulo}
         className={cn(
-          "group/ajuda inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full border border-primary/15 bg-secondary/80 pr-3 pl-1.5 text-xs font-bold text-primary transition-colors hover:bg-primary hover:text-primary-foreground",
+          "group/ajuda inline-flex h-7 shrink-0 items-center rounded-full text-muted-foreground/70 transition-all duration-200 hover:bg-secondary hover:pr-2.5 hover:text-primary focus-visible:bg-secondary focus-visible:pr-2.5 focus-visible:text-primary focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/40",
           className
         )}
       >
-        <CircleQuestionMark size={18} className="group-hover/ajuda:hidden" />
-        <CirclePlay size={18} className="hidden group-hover/ajuda:block" />
-        Como usar
+        <span className="flex size-7 items-center justify-center">
+          <CircleQuestionMark size={17} className="group-hover/ajuda:hidden group-focus-visible/ajuda:hidden" />
+          <CirclePlay size={17} className="hidden group-hover/ajuda:block group-focus-visible/ajuda:block" />
+        </span>
+        <span className="max-w-0 overflow-hidden whitespace-nowrap text-xs font-bold transition-all duration-200 group-hover/ajuda:max-w-24 group-focus-visible/ajuda:max-w-24">
+          Ver tutorial
+        </span>
       </button>
       <TutorialModal tutoriais={videos} open={aberto} onOpenChange={setAberto} />
     </>
