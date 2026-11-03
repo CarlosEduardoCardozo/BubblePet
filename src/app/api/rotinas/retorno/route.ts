@@ -3,6 +3,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { executarRotinaRetorno } from "@/lib/retorno/enviar";
 import { executarAvisosFidelidade } from "@/lib/fidelidade-avisos";
 import { executarLembretes } from "@/lib/agenda/lembretes";
+import { executarDisparos } from "@/lib/disparos";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -34,5 +35,10 @@ export async function POST(request: Request) {
     console.error("Falha nos lembretes automáticos", e);
     return null;
   });
-  return Response.json({ ...resumo, fidelidade, lembretes });
+  // Disparos em massa para leads (admin): poucos por rodada, dentro da janela de horário.
+  const disparos = await executarDisparos().catch((e) => {
+    console.error("Falha nos disparos para leads", e);
+    return null;
+  });
+  return Response.json({ ...resumo, fidelidade, lembretes, disparos });
 }

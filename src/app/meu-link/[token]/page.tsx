@@ -17,7 +17,7 @@ import {
 import { appUrl } from "@/lib/app-url";
 import { formatPhoneBR } from "@/lib/phone";
 import { linkWhatsapp } from "@/lib/link-gratis/comum";
-import { linkPorToken, pedidosDoLink, rotuloDia } from "@/lib/link-gratis/servidor";
+import { contatoComercial, linkPorToken, pedidosDoLink, rotuloDia } from "@/lib/link-gratis/servidor";
 import { CopiarBotao } from "@/components/link-gratis/CopiarBotao";
 import { EditarLinkForm } from "./EditarLinkForm";
 
@@ -68,7 +68,7 @@ export default async function MeuLinkPage({ params }: { params: Promise<{ token:
     );
   }
 
-  const [pedidos, base] = await Promise.all([pedidosDoLink(link.id), appUrl()]);
+  const [pedidos, base, comercial] = await Promise.all([pedidosDoLink(link.id), appUrl(), contatoComercial()]);
   const linkPublico = `${base}/agendar/${link.slug}`;
 
   const cadastro = `/cadastro?${new URLSearchParams({
@@ -77,10 +77,9 @@ export default async function MeuLinkPage({ params }: { params: Promise<{ token:
     petshop: link.nomePetshop,
     telefone: formatPhoneBR(link.whatsapp),
   })}`;
-  const comercial = process.env.NEXT_PUBLIC_WHATSAPP_COMERCIAL?.replace(/\D/g, "");
   const conversaComercial = comercial
     ? linkWhatsapp(
-        `+${comercial}`,
+        comercial,
         `Oi! Sou ${link.nomeDono}, do ${link.nomePetshop}. Uso o link grátis do BubblePet e quero saber mais sobre a agenda completa.`
       )
     : null;

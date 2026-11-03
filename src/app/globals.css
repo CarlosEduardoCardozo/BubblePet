@@ -446,3 +446,20 @@
     animation: none;
   }
 }
+
+/* Confete da comemoração dos primeiros passos. */
+@keyframes bp-confete {
+  0% {
+    transform: translate3d(0, 0, 0) rotate(0deg) scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: translate3d(var(--dx), var(--dy), 0) rotate(var(--rot)) scale(0.6);
+    opacity: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .bp-confete {
+    display: none;
+  }
+}

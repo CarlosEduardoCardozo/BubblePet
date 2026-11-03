@@ -4,7 +4,7 @@ import { createHash, randomBytes } from "node:crypto";
 import { headers } from "next/headers";
 import { DateTime } from "luxon";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { enviarTexto, UazapiError } from "@/lib/uazapi";
+import { carregarConfigPlataforma, enviarPelaPlataforma as enviarTextoPlataforma } from "@/lib/plataforma";
 import { slugify, slugValido } from "@/lib/slug";
 import { DIAS_A_FRENTE, type ServicoGratis } from "./comum";
 
@@ -320,20 +320,55 @@ export async function pedidosDoLink(linkId: string): Promise<Pedido[]> {
 export type ResultadoPlataforma = { status: "enviado" } | { status: "ignorado" } | { status: "erro"; erro: string };
 
 /**
- * Envia pelo número do próprio BubblePet (instância da UAZAPI cujo token fica
- * em BUBBLEPET_WHATSAPP_TOKEN). Sem o token configurado, não envia e devolve
- * "ignorado" — o pedido continua salvo na página de gestão. Nunca lança.
+ * Envia pelo número do próprio BubblePet (o configurado em Admin ›
+ * Plataforma). Sem número configurado, não envia e devolve "ignorado" — o
+ * pedido continua salvo na página de pedidos. Nunca lança.
  */
 export async function enviarPelaPlataforma(numeroE164: string, texto: string): Promise<ResultadoPlataforma> {
-  const token = process.env.BUBBLEPET_WHATSAPP_TOKEN;
-  if (!token || !process.env.UAZAPI_BASE_URL) return { status: "ignorado" };
   try {
-    await enviarTexto(token, numeroE164, texto);
-    return { status: "enviado" };
+    const config = await carregarConfigPlataforma();
+    if (!config.disparoUrl || !config.disparoToken) return { status: "ignorado" };
+    const r = await enviarTextoPlataforma(numeroE164, texto, config);
+    if (r.ok) return { status: "enviado" };
+    console.error("[link-gratis] envio pela plataforma falhou:", r.erro);
+    return { status: "erro", erro: r.erro.slice(0, 200) };
   } catch (error) {
-    const erro =
-      error instanceof UazapiError ? `UAZAPI ${error.status}` : error instanceof Error ? error.message : "erro";
+    const erro = error instanceof Error ? error.message : "erro";
     console.error("[link-gratis] envio pela plataforma falhou:", erro);
     return { status: "erro", erro: erro.slice(0, 200) };
+  }
+}
+
+/** WhatsApp comercial do BubblePet (Admin › Plataforma), em E.164 ou null. */
+export async function contatoComercial(): Promise<string | null> {
+  try {
+    const numero = (await carregarConfigPlataforma()).contatoWhatsapp?.replace(/\D/g, "");
+    return numero ? `+${numero}` : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Quem cria um link grátis entra no CRM (origem "landing"). Mesmo WhatsApp de
+ * novo não duplica: só registra no histórico. Nunca lança.
+ */
+export async function registrarLeadDoLink(d: { nome: string; telefone: string; petshopNome: string; ip: string | null }) {
+  try {
+    const db = createAdminClient();
+    const texto = `Criou o link de agendamento grátis (${d.petshopNome}).`;
+    const { data: existente } = await db.from("leads").select("id").eq("telefone", d.telefone).maybeSingle();
+    if (existente) {
+      await db.from("leads_historico").insert({ lead_id: existente.id, tipo: "nota", texto });
+      return;
+    }
+    const { data: novo } = await db
+      .from("leads")
+      .insert({ nome: d.nome, telefone: d.telefone, petshop_nome: d.petshopNome, origem: "landing", ip: d.ip })
+      .select("id")
+      .single();
+    if (novo) await db.from("leads_historico").insert({ lead_id: novo.id, tipo: "etapa", texto });
+  } catch (e) {
+    console.error("[link-gratis] não foi possível registrar o lead", e);
   }
 }

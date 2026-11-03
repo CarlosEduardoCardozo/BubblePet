@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import { DateTime } from "luxon";
 import { toast } from "sonner";
-import { LogIn, MessageCircle, Search, Snowflake, Sun } from "lucide-react";
+import { CalendarPlus, Crown, FlaskConical, LogIn, MessageCircle, Search, Snowflake, Sun } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import Link from "next/link";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -12,7 +12,8 @@ import { PageHeader } from "@/components/shared/PageHeader";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { normalizarBusca } from "@/components/shared/Combobox";
 import { cn } from "@/lib/utils";
-import { alterarStatusPetshop, entrarComo } from "./actions";
+import { situacaoDaConta } from "@/lib/teste";
+import { alterarStatusPetshop, definirPlanoConta, entrarComo } from "./actions";
 
 export type SituacaoUso = "usando" | "pouco" | "parado" | "nunca";
 
@@ -31,6 +32,8 @@ export type ContaAdmin = {
   nome: string;
   slug: string | null;
   status: "ativo" | "congelado";
+  planoStatus: "teste" | "assinante";
+  testeAte: string | null;
   criadoEm: string;
   whatsappConectado: boolean;
   usuarios: UsuarioAdmin[];
@@ -64,6 +67,14 @@ function Resumo({ rotulo, valor, destaque }: { rotulo: string; valor: number; de
   );
 }
 
+function BadgePlano({ conta }: { conta: ContaAdmin }) {
+  const s = situacaoDaConta(conta.planoStatus, conta.testeAte);
+  if (s.tipo === "assinante") return <Badge variant="secondary" className="bg-emerald-100 text-emerald-800">Assinante</Badge>;
+  if (s.tipo === "teste") return <Badge variant="secondary" className="bg-amber-100 text-amber-800">Teste · {s.diasRestantes} {s.diasRestantes === 1 ? "dia" : "dias"}</Badge>;
+  if (s.tipo === "tolerancia") return <Badge variant="secondary" className="bg-orange-100 text-orange-800">Teste acabou · tolerância</Badge>;
+  return <Badge variant="secondary" className="bg-red-100 text-red-800">Teste vencido · bloqueada</Badge>;
+}
+
 export function AdminView({ contas }: { contas: ContaAdmin[] }) {
   const [busca, setBusca] = useState("");
   const [filtro, setFiltro] = useState<SituacaoUso | "todas">("todas");
@@ -94,6 +105,14 @@ export function AdminView({ contas }: { contas: ContaAdmin[] }) {
         toast.success(novo === "congelado" ? `${conta.nome} congelado.` : `${conta.nome} reativado.`);
         setAlvo(null);
       }
+    });
+  }
+
+  function mudarPlano(conta: ContaAdmin, acao: Parameters<typeof definirPlanoConta>[1], msg: string) {
+    startTransition(async () => {
+      const r = await definirPlanoConta(conta.id, acao);
+      if ("error" in r) toast.error(r.error);
+      else toast.success(`${conta.nome}: ${msg}`);
     });
   }
 
@@ -182,6 +201,7 @@ export function AdminView({ contas }: { contas: ContaAdmin[] }) {
                 </span>
               </div>
               <div className="flex items-center gap-2">
+                <BadgePlano conta={c} />
                 {c.status === "congelado" ? (
                   <Badge variant="secondary" className="bg-sky-100 text-sky-700">Congelado</Badge>
                 ) : (
@@ -206,6 +226,23 @@ export function AdminView({ contas }: { contas: ContaAdmin[] }) {
                   )}
                 </Button>
               </div>
+            </div>
+
+            <div className="flex flex-wrap gap-2">
+              {c.planoStatus === "teste" ? (
+                <>
+                  <Button variant="outline" size="sm" disabled={isPending} onClick={() => mudarPlano(c, { tipo: "assinante" }, "virou assinante.")}>
+                    <Crown size={14} /> Virar assinante
+                  </Button>
+                  <Button variant="outline" size="sm" disabled={isPending} onClick={() => mudarPlano(c, { tipo: "estender", dias: 3 }, "teste estendido em 3 dias.")}>
+                    <CalendarPlus size={14} /> +3 dias de teste
+                  </Button>
+                </>
+              ) : (
+                <Button variant="ghost" size="sm" disabled={isPending} onClick={() => mudarPlano(c, { tipo: "teste" }, "colocada em teste de 5 dias.")}>
+                  <FlaskConical size={14} /> Colocar em teste (5 dias)
+                </Button>
+              )}
             </div>
 
             <div className="grid grid-cols-2 gap-2 text-sm sm:grid-cols-5">

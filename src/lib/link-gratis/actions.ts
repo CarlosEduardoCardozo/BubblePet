@@ -17,6 +17,7 @@ import {
   enviarPelaPlataforma,
   ipDaRequisicao,
   limitePedido,
+  registrarLeadDoLink,
   linkPorToken,
   linkPublicoPorSlug,
   marcarAviso,
@@ -78,6 +79,13 @@ export async function criarLinkAction(_prev: CriarLinkState, formData: FormData)
     servicos,
   });
   if (!r.ok) return { ok: false, erro: r.erro };
+
+  await registrarLeadDoLink({
+    nome: parsed.data.nomeDono,
+    telefone: whatsapp,
+    petshopNome: r.link.nomePetshop,
+    ip: await ipDaRequisicao(),
+  });
 
   const base = await appUrl();
   const linkPublico = `${base}/agendar/${r.link.slug}`;
