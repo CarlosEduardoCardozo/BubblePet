@@ -66,29 +66,36 @@ let modeloLiberado: string | null = null;
 async function vozDaOpenAI(fala: string): Promise<Buffer> {
   const chaveApi = process.env.OPENAI_API_KEY;
   if (!chaveApi) throw new Error("Configure OPENAI_API_KEY no .env.local (ou use --sem-voz pra testar).");
-  const candidatos = modeloLiberado ? [modeloLiberado] : MODELOS_TTS;
+  // O que já funcionou vem primeiro, mas os outros continuam de reserva: a
+  // liberação de modelos da OpenAI demora a valer e pode oscilar no começo.
+  const candidatos = modeloLiberado ? [modeloLiberado, ...MODELOS_TTS.filter((m) => m !== modeloLiberado)] : MODELOS_TTS;
   let ultimoErro = "";
   for (const modelo of candidatos) {
-    const r = await fetch("https://api.openai.com/v1/audio/speech", {
-      method: "POST",
-      headers: { authorization: `Bearer ${chaveApi}`, "content-type": "application/json" },
-      body: JSON.stringify({
-        model: modelo,
-        voice: VOZ,
-        input: fala,
-        // Só os modelos gpt-*-tts aceitam instruções de tom.
-        ...(modelo.startsWith("tts-1") ? {} : { instructions: INSTRUCOES_VOZ }),
-        response_format: "mp3",
-      }),
-    });
-    if (r.ok) {
-      if (modeloLiberado !== modelo) console.log(`  voz: modelo ${modelo}, voz ${VOZ}`);
-      modeloLiberado = modelo;
-      return Buffer.from(await r.arrayBuffer());
+    for (let tentativa = 1; tentativa <= 2; tentativa++) {
+      const r = await fetch("https://api.openai.com/v1/audio/speech", {
+        method: "POST",
+        headers: { authorization: `Bearer ${chaveApi}`, "content-type": "application/json" },
+        body: JSON.stringify({
+          model: modelo,
+          voice: VOZ,
+          input: fala,
+          // Só os modelos gpt-*-tts aceitam instruções de tom.
+          ...(modelo.startsWith("tts-1") ? {} : { instructions: INSTRUCOES_VOZ }),
+          response_format: "mp3",
+        }),
+      });
+      if (r.ok) {
+        if (modeloLiberado !== modelo) console.log(`  voz: modelo ${modelo}, voz ${VOZ}`);
+        modeloLiberado = modelo;
+        return Buffer.from(await r.arrayBuffer());
+      }
+      ultimoErro = `OpenAI respondeu ${r.status}: ${(await r.text()).slice(0, 300)}`;
+      const semAcesso = (r.status === 403 || r.status === 404) && /model/i.test(ultimoErro);
+      // Outro erro (chave, saldo, texto): para aqui.
+      if (!semAcesso) throw new Error(ultimoErro);
+      // Sem acesso: espera um pouco e tenta de novo; na segunda, vai pro próximo modelo.
+      if (tentativa === 1) await new Promise((res) => setTimeout(res, 2500));
     }
-    ultimoErro = `OpenAI respondeu ${r.status}: ${(await r.text()).slice(0, 300)}`;
-    // Sem acesso a esse modelo: tenta o próximo. Qualquer outro erro para aqui.
-    if (!(r.status === 403 || r.status === 404) || !/model/i.test(ultimoErro)) break;
   }
   throw new Error(
     `${ultimoErro}\nSe nenhum modelo de voz estiver liberado, libere "tts-1" no projeto da OpenAI ` +
