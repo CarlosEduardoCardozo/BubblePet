@@ -20,7 +20,8 @@
  * (npx playwright install chromium) e, no .env.local, OPENAI_API_KEY,
  * NEXT_PUBLIC_SUPABASE_URL e SUPABASE_SERVICE_ROLE_KEY.
  * Variáveis opcionais: TUTORIAL_URL (padrão http://localhost:3000),
- * TUTORIAL_VOZ (padrão "nova"), TUTORIAL_TTS_MODEL (padrão "gpt-4o-mini-tts").
+ * TUTORIAL_VOZ (padrão "nova"), TUTORIAL_TTS_MODEL (padrão "gpt-4o-mini-tts"; sem acesso a ele,
+ * tenta "tts-1-hd" e "tts-1").
  */
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
@@ -57,6 +58,44 @@ function duracaoDoAudio(arquivo: string): number {
   return Number(out.toString().trim());
 }
 
+// Modelos tentados em ordem: o configurado e, se o projeto da OpenAI não tiver
+// acesso a ele, os clássicos (mesma voz, sem as instruções de tom).
+const MODELOS_TTS = [...new Set([MODELO_TTS, "tts-1-hd", "tts-1"])];
+let modeloLiberado: string | null = null;
+
+async function vozDaOpenAI(fala: string): Promise<Buffer> {
+  const chaveApi = process.env.OPENAI_API_KEY;
+  if (!chaveApi) throw new Error("Configure OPENAI_API_KEY no .env.local (ou use --sem-voz pra testar).");
+  const candidatos = modeloLiberado ? [modeloLiberado] : MODELOS_TTS;
+  let ultimoErro = "";
+  for (const modelo of candidatos) {
+    const r = await fetch("https://api.openai.com/v1/audio/speech", {
+      method: "POST",
+      headers: { authorization: `Bearer ${chaveApi}`, "content-type": "application/json" },
+      body: JSON.stringify({
+        model: modelo,
+        voice: VOZ,
+        input: fala,
+        // Só os modelos gpt-*-tts aceitam instruções de tom.
+        ...(modelo.startsWith("tts-1") ? {} : { instructions: INSTRUCOES_VOZ }),
+        response_format: "mp3",
+      }),
+    });
+    if (r.ok) {
+      if (modeloLiberado !== modelo) console.log(`  voz: modelo ${modelo}, voz ${VOZ}`);
+      modeloLiberado = modelo;
+      return Buffer.from(await r.arrayBuffer());
+    }
+    ultimoErro = `OpenAI respondeu ${r.status}: ${(await r.text()).slice(0, 300)}`;
+    // Sem acesso a esse modelo: tenta o próximo. Qualquer outro erro para aqui.
+    if (!(r.status === 403 || r.status === 404) || !/model/i.test(ultimoErro)) break;
+  }
+  throw new Error(
+    `${ultimoErro}\nSe nenhum modelo de voz estiver liberado, libere "tts-1" no projeto da OpenAI ` +
+      `(platform.openai.com › Settings › Project › Limits › Model access).`
+  );
+}
+
 async function narrar(fala: string): Promise<{ arquivo: string; segundos: number }> {
   mkdirSync(CACHE, { recursive: true });
   const semVoz = flag("sem-voz");
@@ -68,15 +107,7 @@ async function narrar(fala: string): Promise<{ arquivo: string; segundos: number
       const segundos = Math.max(2, fala.split(/\s+/).length / 2.6);
       execFileSync("ffmpeg", ["-y", "-v", "error", "-f", "lavfi", "-i", "anullsrc=r=24000:cl=mono", "-t", segundos.toFixed(2), "-q:a", "9", arquivo]);
     } else {
-      const chaveApi = process.env.OPENAI_API_KEY;
-      if (!chaveApi) throw new Error("Configure OPENAI_API_KEY no .env.local (ou use --sem-voz pra testar).");
-      const r = await fetch("https://api.openai.com/v1/audio/speech", {
-        method: "POST",
-        headers: { authorization: `Bearer ${chaveApi}`, "content-type": "application/json" },
-        body: JSON.stringify({ model: MODELO_TTS, voice: VOZ, input: fala, instructions: INSTRUCOES_VOZ, response_format: "mp3" }),
-      });
-      if (!r.ok) throw new Error(`OpenAI respondeu ${r.status}: ${(await r.text()).slice(0, 300)}`);
-      writeFileSync(arquivo, Buffer.from(await r.arrayBuffer()));
+      writeFileSync(arquivo, await vozDaOpenAI(fala));
     }
   }
   return { arquivo, segundos: duracaoDoAudio(arquivo) };
