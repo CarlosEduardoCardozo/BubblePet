@@ -70,8 +70,10 @@ async function vozDaOpenAI(fala: string): Promise<Buffer> {
   // liberação de modelos da OpenAI demora a valer e pode oscilar no começo.
   const candidatos = modeloLiberado ? [modeloLiberado, ...MODELOS_TTS.filter((m) => m !== modeloLiberado)] : MODELOS_TTS;
   let ultimoErro = "";
-  for (const modelo of candidatos) {
-    for (let tentativa = 1; tentativa <= 2; tentativa++) {
+  // A liberação de modelos da OpenAI oscila por um tempo depois de mudar:
+  // dá até 4 voltas pelos modelos, esperando mais a cada volta (5, 10, 20 s).
+  for (let volta = 1; volta <= 4; volta++) {
+    for (const modelo of candidatos) {
       const r = await fetch("https://api.openai.com/v1/audio/speech", {
         method: "POST",
         headers: { authorization: `Bearer ${chaveApi}`, "content-type": "application/json" },
@@ -93,13 +95,16 @@ async function vozDaOpenAI(fala: string): Promise<Buffer> {
       const semAcesso = (r.status === 403 || r.status === 404) && /model/i.test(ultimoErro);
       // Outro erro (chave, saldo, texto): para aqui.
       if (!semAcesso) throw new Error(ultimoErro);
-      // Sem acesso: espera um pouco e tenta de novo; na segunda, vai pro próximo modelo.
-      if (tentativa === 1) await new Promise((res) => setTimeout(res, 2500));
+    }
+    if (volta < 4) {
+      const espera = 5000 * 2 ** (volta - 1);
+      console.log(`  voz: a OpenAI recusou os modelos de voz, tentando de novo em ${espera / 1000} s...`);
+      await new Promise((res) => setTimeout(res, espera));
     }
   }
   throw new Error(
-    `${ultimoErro}\nSe nenhum modelo de voz estiver liberado, libere "tts-1" no projeto da OpenAI ` +
-      `(platform.openai.com › Settings › Project › Limits › Model access).`
+    `${ultimoErro}\nO projeto da OpenAI dessa chave recusou todos os modelos de voz. Em platform.openai.com › ` +
+      `Settings › Project › Limits, escolha "Permitir todos os modelos" (ou confira se tts-1 está permitido e salvo).`
   );
 }
 
