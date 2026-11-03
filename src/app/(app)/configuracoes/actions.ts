@@ -135,6 +135,15 @@ export async function updateSlug(slugRaw: string): Promise<ActionResult> {
     };
   }
 
+  // /agendar/<slug> também atende links grátis: não pode tomar o endereço de um.
+  const { data: linkGratis } = await createAdminClient()
+    .from("links_gratis")
+    .select("id")
+    .eq("slug", slug)
+    .is("petshop_id", null)
+    .maybeSingle();
+  if (linkGratis) return { error: "Esse endereço já está em uso por outro petshop." };
+
   const supabase = await createClient();
   const petshopId = await getCurrentPetshopId(supabase);
   const { error } = await supabase

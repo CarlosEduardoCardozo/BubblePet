@@ -13,6 +13,7 @@ import {
   TrendingUp,
   UserCog,
   BarChart3,
+  GraduationCap,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import type { Modulo } from "@/lib/permissoes";
@@ -68,6 +69,7 @@ export const NAV_GRUPOS: NavGrupo[] = [
   {
     titulo: "Sistema",
     itens: [
+      { href: "/tutoriais", label: "Tutoriais", icon: GraduationCap },
       { href: "/configuracoes", label: "Configurações", icon: Settings },
       { href: "/equipe", label: "Equipe", icon: UserCog, somenteDono: true },
       { href: "/admin", label: "Admin", icon: ShieldCheck, somenteAdmin: true },

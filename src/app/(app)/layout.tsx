@@ -13,6 +13,8 @@ import { ehAdmin } from "@/lib/admin";
 import { lerModulos, TODOS_MODULOS } from "@/lib/permissoes";
 import { lerSuporte } from "@/lib/suporte";
 import { registrarUso } from "@/lib/uso";
+import { lerTutoriais } from "@/lib/tutoriais";
+import { TutoriaisProvider } from "@/components/tutoriais/Tutoriais";
 
 export default async function AppLayout({
   children,
@@ -55,6 +57,13 @@ export default async function AppLayout({
     if (status?.status === "congelado") redirect("/suspenso");
   }
 
+  // Vídeos de ajuda (globais). Sem a tabela ou com erro, o painel segue sem eles.
+  const { data: tutoriaisRows } = await supabase
+    .from("tutoriais")
+    .select("id, topico, titulo, descricao, video_url, duracao, ordem")
+    .eq("ativo", true);
+  const tutoriais = lerTutoriais(tutoriaisRows ?? []);
+
   const suporte = await lerSuporte(user.id);
   // Teste e tolerância acabaram: bloqueia até assinar (o admin em modo suporte passa).
   if (situacao.tipo === "expirado" && !suporte && !ehAdmin(user.email)) redirect("/assinar");
@@ -74,6 +83,7 @@ export default async function AppLayout({
   }
 
   return (
+    <TutoriaisProvider tutoriais={tutoriais}>
     <div className="flex min-h-screen flex-col">
       {suporte && <SuporteBanner usuario={suporte.alvoNome} petshop={suporte.petshopNome} />}
       {!suporte && <TesteBanner situacao={situacao} />}
@@ -93,5 +103,6 @@ export default async function AppLayout({
         <PrimeirosPassos diasDeTeste={situacao.tipo === "teste" ? situacao.diasRestantes : null} />
       )}
     </div>
+    </TutoriaisProvider>
   );
 }

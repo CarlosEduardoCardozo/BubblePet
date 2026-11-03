@@ -1,7 +1,7 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
-const PUBLIC_PREFIXES = ["/agendar", "/api", "/enviar"];
+const PUBLIC_PREFIXES = ["/agendar", "/api", "/enviar", "/meu-link"];
 
 export async function updateSession(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request });
@@ -35,7 +35,8 @@ export async function updateSession(request: NextRequest) {
   const isAuthRoute = pathname.startsWith("/login") || pathname.startsWith("/cadastro");
   // Link público de agendamento e route handlers não dependem da sessão do
   // petshop: /agendar tem a própria sessão (cookie do tutor), /enviar vale pelo
-  // token do QR code e cada /api autentica sozinho.
+  // token do QR code, /meu-link (pedidos do link grátis) pelo token na URL e
+  // cada /api autentica sozinho.
   // A raiz é a landing page: aberta pra qualquer visitante.
   const isPublic =
     pathname === "/" ||

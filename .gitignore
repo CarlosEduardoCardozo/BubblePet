@@ -43,3 +43,8 @@ supabase/.branches
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Tutoriais em vídeo (scripts/tutoriais)
+scripts/tutoriais/.demo.json
+scripts/tutoriais/.cache/
+scripts/tutoriais/saida/

@@ -48,6 +48,8 @@ export default async function AdminPage() {
     db
       .from("petshops")
       .select("id, nome, slug, telefone, status, congelado_em, criado_em, whatsapp_status, plano_status, teste_ate")
+      // Petshop de demonstração dos tutoriais (scripts/tutoriais) não é conta de verdade.
+      .not("slug", "like", "demo-%")
       .order("criado_em", { ascending: false }),
     db.from("perfis").select("id, nome, petshop_id, role, ativo, ultimo_uso_em").order("criado_em"),
     db.from("tutores").select("petshop_id").eq("ativo", true),

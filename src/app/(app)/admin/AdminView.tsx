@@ -5,7 +5,8 @@ import { DateTime } from "luxon";
 import { toast } from "sonner";
 import { CalendarPlus, Crown, FlaskConical, LogIn, MessageCircle, Search, Snowflake, Sun } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import Link from "next/link";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
@@ -128,7 +129,15 @@ export function AdminView({ contas }: { contas: ContaAdmin[] }) {
 
   return (
     <div className="flex flex-col gap-6">
-      <PageHeader title="Admin" description="Quem está usando o BubblePet e como." />
+      <PageHeader
+        title="Admin"
+        description="Quem está usando o BubblePet e como."
+        action={
+          <Link href="/admin/links" className={buttonVariants({ variant: "outline" })}>
+            Links grátis
+          </Link>
+        }
+      />
 
       <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
         <Resumo rotulo="Contas" valor={contas.length} />

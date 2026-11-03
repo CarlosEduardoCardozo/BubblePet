@@ -4,6 +4,7 @@ import { CalendarX, ChevronLeft, ChevronRight, PanelLeftClose, PanelLeftOpen } f
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { AGENDAMENTO_STATUSES, STATUS_COLORS, STATUS_LABELS } from "@/lib/agendamento";
+import { AjudaVideo } from "@/components/tutoriais/Tutoriais";
 
 export type AgendaViewType = "timeGridWeek" | "timeGridDay";
 
@@ -56,6 +57,8 @@ export function AgendaToolbar({
       <h2 className="text-base font-semibold sm:text-lg">
         {title.charAt(0).toUpperCase() + title.slice(1)}
       </h2>
+
+      <AjudaVideo topico="agenda" />
 
       <div className="ml-auto hidden items-center gap-3 text-[11px] text-muted-foreground lg:flex">
         {AGENDAMENTO_STATUSES.filter((s) => s !== "cancelado").map((status) => (

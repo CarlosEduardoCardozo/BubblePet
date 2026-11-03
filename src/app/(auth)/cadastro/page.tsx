@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { use, useActionState, useState } from "react";
 import Link from "next/link";
 import { Eye, EyeOff } from "lucide-react";
 import { AuthShell } from "@/components/layout/AuthShell";
@@ -11,7 +11,12 @@ import { cadastrar, type CadastroState } from "./actions";
 
 const initialState: CadastroState = undefined;
 
-export default function CadastroPage() {
+type Params = { link?: string; nome?: string; petshop?: string; telefone?: string };
+
+export default function CadastroPage({ searchParams }: { searchParams: Promise<Params> }) {
+  // Vindo do link grátis (/meu-link): já preenche e leva o link junto.
+  const sp = use(searchParams);
+  const texto = (v: string | undefined) => (typeof v === "string" ? v.slice(0, 80) : undefined);
   const [state, formAction, isPending] = useActionState(cadastrar, initialState);
   const [mostrarSenha, setMostrarSenha] = useState(false);
 
@@ -26,17 +31,17 @@ export default function CadastroPage() {
         <form action={formAction} className="mt-6 flex flex-col gap-4">
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="nome">Seu nome</Label>
-            <Input id="nome" name="nome" autoComplete="name" autoFocus placeholder="Maria Silva" required />
+            <Input id="nome" name="nome" autoComplete="name" autoFocus placeholder="Maria Silva" required defaultValue={texto(sp.nome)} />
           </div>
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="petshop">Nome do petshop</Label>
-            <Input id="petshop" name="petshop" autoComplete="organization" placeholder="PetShop Araquari" required />
+            <Input id="petshop" name="petshop" autoComplete="organization" placeholder="PetShop Araquari" required defaultValue={texto(sp.petshop)} />
           </div>
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="telefone">
               WhatsApp do petshop <span className="font-normal text-muted-foreground">(opcional)</span>
             </Label>
-            <Input id="telefone" name="telefone" inputMode="tel" autoComplete="tel" placeholder="(47) 99999-9999" />
+            <Input id="telefone" name="telefone" inputMode="tel" autoComplete="tel" placeholder="(47) 99999-9999" defaultValue={texto(sp.telefone)} />
           </div>
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="email">E-mail</Label>
@@ -65,6 +70,7 @@ export default function CadastroPage() {
             </div>
             <span className="text-xs text-muted-foreground">Pelo menos 8 caracteres.</span>
           </div>
+          {sp.link && <input type="hidden" name="link" value={sp.link.slice(0, 80)} />}
           {/* Armadilha pra robô: invisível pra gente, preenchido por bot. */}
           <input
             type="text"
