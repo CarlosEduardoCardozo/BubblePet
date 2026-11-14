@@ -4,7 +4,13 @@ import { getCurrentPetshopId } from "@/lib/supabase/petshop";
 import { competenciaDe, totalizar, ZONE } from "@/lib/fechamento/calcular";
 import { carregarBaseFechamento, carregarPendencias } from "@/lib/fechamento/carregar";
 import { PageHeader } from "@/components/shared/PageHeader";
+import type { MetodoPagamento } from "@/lib/pagamentos";
 import { FinanceiroView, type FechamentoRow } from "./FinanceiroView";
+
+type MetodoRow = Omit<MetodoPagamento, "taxas" | "taxa_fixa_valor"> & {
+  taxa_fixa_valor: number | string | null;
+  metodo_taxas_parcela: { parcelas: number; percentual: number | string }[] | null;
+};
 
 type Um<T> = T | T[] | null | undefined;
 function um<T>(v: Um<T>): T | undefined {
@@ -29,7 +35,7 @@ export default async function FinanceiroPage({
   const supabase = await createClient();
   const petshopId = await getCurrentPetshopId(supabase);
 
-  const [{ data: rows, error }, { data: rascunhos }, { data: aguardando }, base, { data: petshop }] =
+  const [{ data: rows, error }, { data: rascunhos }, { data: aguardando }, base, { data: petshop }, { data: metodos }] =
     await Promise.all([
       supabase
         .from("fechamentos")
@@ -54,6 +60,14 @@ export default async function FinanceiroPage({
         .select("chave_pix, telefone, whatsapp_status")
         .eq("id", petshopId)
         .single(),
+      supabase
+        .from("metodos_pagamento")
+        .select(
+          "id, descricao, tipo, bandeira, ativo, caixa_id, taxa_fixa_tipo, taxa_fixa_valor, prazo_modo, prazo_dias, parcelado_modo, max_parcelas, sistema, metodo_taxas_parcela(parcelas, percentual)"
+        )
+        .eq("ativo", true)
+        .order("sistema", { ascending: false })
+        .order("descricao"),
     ]);
 
   if (error) {
@@ -133,6 +147,13 @@ export default async function FinanceiroPage({
         temTelefone: !!petshop?.telefone,
         whatsappConectado: petshop?.whatsapp_status === "conectado",
       }}
+      metodos={((metodos ?? []) as unknown as MetodoRow[]).map((m) => ({
+        ...m,
+        taxa_fixa_valor: m.taxa_fixa_valor === null ? null : Number(m.taxa_fixa_valor),
+        taxas: (m.metodo_taxas_parcela ?? [])
+          .map((t) => ({ parcelas: t.parcelas, percentual: Number(t.percentual) }))
+          .sort((a, b) => a.parcelas - b.parcelas),
+      }))}
     />
   );
 }

@@ -5,6 +5,7 @@ import {
   Wallet,
   Scissors,
   Landmark,
+  Banknote,
   Settings,
   ShieldCheck,
   ClipboardList,
@@ -63,6 +64,7 @@ export const NAV_GRUPOS: NavGrupo[] = [
     titulo: "Gestão",
     itens: [
       { href: "/financeiro", label: "Financeiro", icon: Landmark },
+      { href: "/caixa", label: "Caixa", icon: Banknote },
       { href: "/relatorios", label: "Relatórios", icon: BarChart3 },
     ],
   },

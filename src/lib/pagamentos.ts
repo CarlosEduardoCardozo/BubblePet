@@ -115,3 +115,15 @@ export type MetodoInput = {
   max_parcelas: number;
   taxas: { parcelas: number; percentual: number }[];
 };
+
+/** Como o caixa do dia agrupa os recebimentos: dinheiro, pix, cartão, boleto. */
+export const GRUPOS_RECEBIMENTO = [
+  { valor: "dinheiro", label: "Dinheiro", tipos: ["dinheiro"] },
+  { valor: "pix", label: "Pix", tipos: ["pix"] },
+  { valor: "cartao", label: "Cartão", tipos: ["cartao_credito", "maquina_cartao", "link_pagamento"] },
+  { valor: "boleto", label: "Boleto", tipos: ["boleto"] },
+] as const;
+
+export function grupoDoTipo(tipo: string): (typeof GRUPOS_RECEBIMENTO)[number]["valor"] {
+  return GRUPOS_RECEBIMENTO.find((g) => (g.tipos as readonly string[]).includes(tipo))?.valor ?? "dinheiro";
+}

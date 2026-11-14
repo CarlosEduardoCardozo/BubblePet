@@ -44,8 +44,11 @@ import {
   gerarFechamentos,
   juntarExtratos,
   marcarPago,
+  type PagamentoExtrato,
   type ResultadoEnvioLote,
 } from "./actions";
+import { PagamentoExtratoDialog, type ExtratoAPagar } from "./PagamentoExtratoDialog";
+import type { MetodoPagamento } from "@/lib/pagamentos";
 
 const ZONE = "America/Sao_Paulo";
 const LOTE = 25;
@@ -119,14 +122,17 @@ export function FinanceiroView({
   fechamentos,
   resumo,
   petshop,
+  metodos,
 }: {
   competencia: string;
   fechamentos: FechamentoRow[];
   resumo: Resumo;
   petshop: { temPix: boolean; temTelefone: boolean; whatsappConectado: boolean };
+  metodos: MetodoPagamento[];
 }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
+  const [pagando, setPagando] = useState<ExtratoAPagar | null>(null);
   const [enviando, setEnviando] = useState<{ feitos: number; total: number } | null>(null);
   const [confirmEnvio, setConfirmEnvio] = useState(false);
   const [enviandoId, setEnviandoId] = useState<string | null>(null);
@@ -241,12 +247,25 @@ export function FinanceiroView({
   }
 
   function alternarPago(f: FechamentoRow) {
+    if (f.status !== "pago") {
+      setPagando({ id: f.id, tutorNome: f.tutorNome, totalCentavos: f.totalCentavos });
+      return;
+    }
     startTransition(async () => {
-      const r = await marcarPago(f.id, f.status !== "pago");
+      const r = await marcarPago(f.id, false);
       if ("error" in r) toast.error(r.error);
-      else toast.success(f.status === "pago" ? "Extrato reaberto." : `${f.tutorNome} marcado como pago.`);
+      else toast.success("Extrato reaberto. A entrada saiu do Caixa.");
       router.refresh();
     });
+  }
+
+  async function confirmarPagamento(pagamento: PagamentoExtrato): Promise<string | null> {
+    if (!pagando) return null;
+    const r = await marcarPago(pagando.id, true, pagamento);
+    if ("error" in r) return r.error;
+    toast.success(`${pagando.tutorNome} marcado como pago e lançado no Caixa.`);
+    router.refresh();
+    return null;
   }
 
   function enviarRelatorio() {
@@ -569,6 +588,13 @@ export function FinanceiroView({
         confirmVariant="default"
         onConfirm={enviarTodos}
         pending={ocupado}
+      />
+      <PagamentoExtratoDialog
+        key={pagando?.id ?? "fechado"}
+        extrato={pagando}
+        metodos={metodos}
+        onOpenChange={(o) => !o && setPagando(null)}
+        onConfirmar={confirmarPagamento}
       />
     </div>
   );
