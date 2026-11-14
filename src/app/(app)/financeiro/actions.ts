@@ -13,6 +13,8 @@ import { nomeArquivoExtrato, renderFechamentoPdf, renderRelatorioPdf } from "@/l
 import { enviarMensagemWhatsapp } from "@/lib/whatsapp";
 import { templateFechamento, templateRelatorio } from "@/lib/whatsapp-templates";
 import { DateTime } from "luxon";
+import { hojeISO } from "@/lib/lancamentos";
+import { apagarEntradaDoExtrato, lancarEntrada, reabrirExtrato } from "@/lib/lancamentos-entrada";
 
 type ActionResult = { error: string } | { success: true };
 
@@ -263,23 +265,104 @@ export async function enviarFechamentos(ids: string[]): Promise<ResultadoEnvioLo
   return resultado;
 }
 
-export async function marcarPago(id: string, pago: boolean): Promise<ActionResult> {
+export type PagamentoExtrato = {
+  metodoId: string;
+  parcelas: number;
+  /** Dia em que o cliente pagou (yyyy-MM-dd). */
+  data: string;
+};
+
+const DATA_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * Marca o extrato como pago e lança a entrada no Caixa (com a taxa e o prazo
+ * da forma de pagamento), ligada ao extrato. Reabrir tira a entrada do caixa.
+ */
+export async function marcarPago(
+  id: string,
+  pago: boolean,
+  pagamento?: PagamentoExtrato
+): Promise<ActionResult> {
   const bloqueio = await semPermissao("financeiro");
   if (bloqueio) return bloqueio;
   const supabase = await createClient();
+
+  if (!pago) {
+    const r = await reabrirExtrato(supabase, id);
+    if ("error" in r) return r;
+    revalidarFinanceiroECaixa();
+    return { success: true };
+  }
+
+  if (!pagamento?.metodoId) return { error: "Escolha a forma de pagamento." };
+  if (!DATA_RE.test(pagamento.data) || !DateTime.fromISO(pagamento.data).isValid) {
+    return { error: "Data inválida." };
+  }
+  if (pagamento.data > hojeISO()) return { error: "A data do pagamento não pode ser no futuro." };
+  const parcelas = Math.trunc(pagamento.parcelas);
+  if (!(parcelas >= 1 && parcelas <= 12)) return { error: "Parcelas inválidas." };
+
+  const petshopId = await getCurrentPetshopId(supabase);
+  const { data: fechamento, error: erroFech } = await supabase
+    .from("fechamentos")
+    .select("id, status, total_centavos, tutores(nome)")
+    .eq("id", id)
+    .maybeSingle();
+  if (erroFech) return { error: mensagemErroBanco(erroFech) };
+  if (!fechamento) return { error: "Extrato não encontrado." };
+  if (fechamento.status === "pago") return { error: "Esse extrato já está pago." };
+  if (fechamento.total_centavos <= 0) return { error: "Esse extrato não tem valor a receber." };
+
+  const tutor = um(fechamento.tutores as Um<{ nome: string }>);
+  const { data: categoria } = await supabase
+    .from("categorias_financeiras")
+    .select("id")
+    .eq("tipo", "entrada")
+    .eq("nome", "Banho e tosa")
+    .maybeSingle();
+
+  // Se sobrou entrada de uma tentativa anterior, não duplica.
+  const limpeza = await apagarEntradaDoExtrato(supabase, id);
+  if ("error" in limpeza) return limpeza;
+
+  const entrada = await lancarEntrada(supabase, {
+    petshopId,
+    valorCentavos: fechamento.total_centavos,
+    metodoId: pagamento.metodoId,
+    parcelas,
+    data: pagamento.data,
+    descricao: `Extrato · ${tutor?.nome ?? "Cliente"}`,
+    categoriaId: categoria?.id ?? null,
+    caixaId: null,
+    origem: "extrato",
+    fechamentoId: id,
+  });
+  if ("error" in entrada) return entrada;
+
+  const pagoEm = DateTime.fromISO(pagamento.data, { zone: ZONE });
+  const agora = DateTime.now().setZone(ZONE);
   const { error } = await supabase
     .from("fechamentos")
-    .update(
-      pago
-        ? { status: "pago", pago_em: new Date().toISOString() }
-        : { status: "aberto", pago_em: null }
-    )
+    .update({
+      status: "pago",
+      // Pago hoje: guarda a hora; outro dia: o meio-dia daquela data.
+      pago_em: (pagoEm.hasSame(agora, "day") ? agora : pagoEm.set({ hour: 12 })).toUTC().toISO(),
+    })
     .eq("id", id);
-  if (error) return { error: mensagemErroBanco(error) };
+  if (error) {
+    // Não deixa entrada no caixa sem o extrato estar pago.
+    await apagarEntradaDoExtrato(supabase, id);
+    return { error: mensagemErroBanco(error) };
+  }
 
-  revalidatePath("/financeiro");
-  revalidatePath("/dashboard");
+  revalidarFinanceiroECaixa();
   return { success: true };
+}
+
+function revalidarFinanceiroECaixa() {
+  revalidatePath("/financeiro");
+  revalidatePath("/caixa");
+  revalidatePath("/dashboard");
 }
 
 export async function enviarRelatorioDono(competenciaRaw: string): Promise<ActionResult> {

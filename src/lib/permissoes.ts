@@ -26,6 +26,7 @@ const ROTAS_DE_MODULO: { href: string; modulo: Modulo }[] = [
   { href: "/fidelidade", modulo: "clientes" },
   { href: "/hoje", modulo: "agenda" },
   { href: "/relatorios", modulo: "financeiro" },
+  { href: "/caixa", modulo: "financeiro" },
 ];
 
 export function moduloDaRota(pathname: string): Modulo | null {
