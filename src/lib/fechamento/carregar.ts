@@ -2,6 +2,7 @@ import "server-only";
 
 import { DateTime } from "luxon";
 import type { Adicional } from "@/lib/adicionais";
+import { doBanco } from "@/lib/servicos-extras";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   calcularFechamentos,
@@ -22,7 +23,7 @@ function um<T>(v: Um<T>): T | undefined {
 }
 
 const SELECT_AGENDAMENTO =
-  "id, inicio, valor_centavos, origem_plano, fidelidade_resgate, adicionais, pets(id, nome, tutor_id), servicos(nome, preco_centavos), assinaturas(planos(nome, creditos_mes))";
+  "id, inicio, valor_centavos, origem_plano, fidelidade_resgate, adicionais, servicos_extras, pago_em, pets(id, nome, tutor_id), servicos(nome, preco_centavos), assinaturas(planos(nome, creditos_mes))";
 
 type LinhaAgendamento = {
   id: string;
@@ -31,12 +32,14 @@ type LinhaAgendamento = {
   origem_plano: boolean;
   fidelidade_resgate?: boolean | null;
   adicionais: Adicional[] | null;
+  servicos_extras?: unknown;
+  pago_em?: string | null;
   pets: unknown;
   servicos: unknown;
   assinaturas: unknown;
 };
 
-function paraAgendamentos(rows: LinhaAgendamento[] | null): AgendamentoConcluido[] {
+function paraAgendamentos(rows: LinhaAgendamento[] | null, agendado = false): AgendamentoConcluido[] {
   const lista: AgendamentoConcluido[] = [];
   for (const row of rows ?? []) {
     const pet = um(row.pets as Um<{ id: string; nome: string; tutor_id: string }>);
@@ -50,6 +53,9 @@ function paraAgendamentos(rows: LinhaAgendamento[] | null): AgendamentoConcluido
       origem_plano: row.origem_plano,
       fidelidade_resgate: row.fidelidade_resgate ?? false,
       adicionais: row.adicionais ?? [],
+      servicosExtras: doBanco(row.servicos_extras),
+      pagoEm: row.pago_em ?? null,
+      agendado,
       pet,
       servico,
       plano: plano ?? null,
@@ -172,7 +178,8 @@ export async function carregarPendencias(
       ? agsQuery.or(`fechamento_id.is.null,fechamento_id.in.(${opts.rascunhoIds.join(",")})`)
       : agsQuery.is("fechamento_id", null);
 
-  const [{ data: ags }, ativas, tutores, { data: congelados }] = await Promise.all([
+  const { fim: fimMes } = intervaloCompetencia(opts.competencia);
+  const [{ data: ags }, ativas, tutores, { data: congelados }, { data: futuros }] = await Promise.all([
     agsQuery,
     carregarAssinaturasAtivas(supabase, petshopId, fimCompetencia),
     carregarTutores(supabase, petshopId),
@@ -183,6 +190,15 @@ export async function carregarPendencias(
       .select("itens, status, enviado_em")
       .eq("petshop_id", petshopId)
       .eq("competencia", opts.competencia),
+    // Atendimentos do plano que ainda vão acontecer neste mês: aparecem no
+    // extrato com a data, como "agendado", sem valor.
+    supabase
+      .from("agendamentos")
+      .select(SELECT_AGENDAMENTO)
+      .eq("petshop_id", petshopId)
+      .in("status", ["agendado", "confirmado"])
+      .gte("inicio", opts.corte)
+      .lt("inicio", fimMes),
   ]);
 
   const jaCobradas = new Set<string>();
@@ -199,13 +215,28 @@ export async function carregarPendencias(
     competencia: opts.competencia,
   });
 
+  // Só os do plano (coberto), e só pra quem já tem extrato: informativo.
+  const futurosPlano = paraAgendamentos(futuros as LinhaAgendamento[] | null, true)
+    .filter((a) => a.origem_plano || (a.servicosExtras ?? []).some((e) => e.assinaturaId))
+    .map((a) => ({
+      ...a,
+      // Do agendado só entra o que o plano cobre; o resto é cobrado quando acontecer.
+      servicosExtras: (a.servicosExtras ?? []).filter((e) => e.assinaturaId),
+      adicionais: [],
+    }));
+  const itensFuturos = calcularFechamentos({ agendamentos: futurosPlano, assinaturas: [] }).map((f) => ({
+    ...f,
+    itens: f.itens.filter((i) => i.cobertoPlano),
+  }));
+
   return {
-    pendencias: fechamentos.map((f) => ({
-      ...f,
-      agendamentoIds: Array.from(
+    pendencias: fechamentos.map((f) => {
+      const agendamentoIds = Array.from(
         new Set(f.itens.flatMap((i) => (i.agendamentoId ? [i.agendamentoId] : [])))
-      ),
-    })),
+      );
+      const futurosDoTutor = itensFuturos.find((x) => x.tutorId === f.tutorId)?.itens ?? [];
+      return { ...f, itens: [...f.itens, ...futurosDoTutor], agendamentoIds };
+    }),
     tutores,
   };
 }

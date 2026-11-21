@@ -151,27 +151,26 @@ export async function dadosAgendamento(
     }
   }
 
-  const saldoPorAssinatura = new Map<string, number>();
-  if (assinaturasAtivas.length > 0) {
-    const { data: saldos } = await admin
-      .from("saldo_creditos")
-      .select("assinatura_id, saldo")
-      .in("assinatura_id", assinaturasAtivas.map((a) => a.assinaturaId))
-      .eq("competencia", competencia);
-    for (const s of saldos ?? []) saldoPorAssinatura.set(s.assinatura_id, s.saldo);
-  }
+  // Um saldo por serviço do plano (4 banhos, 2 hidratações...).
+  const petsComPlano = Array.from(new Set(assinaturasAtivas.map((a) => a.petId)));
+  const creditos = await Promise.all(
+    petsComPlano.map(async (petId) => {
+      const { data } = await admin.rpc("creditos_do_pet", { p_pet_id: petId, p_competencia: competencia });
+      return {
+        petId,
+        linhas: (data ?? []) as { servico_id: string; plano_nome: string; quantidade: number; saldo: number }[],
+      };
+    })
+  );
 
   const coberturas: Record<string, Record<string, Cobertura>> = {};
   const planoDoPet = new Map<string, string>();
-  for (const a of assinaturasAtivas) {
-    coberturas[a.petId] ??= {};
-    if (coberturas[a.petId][a.servicoId]) continue;
-    coberturas[a.petId][a.servicoId] = {
-      planoNome: a.planoNome,
-      saldo: saldoPorAssinatura.get(a.assinaturaId) ?? 0,
-      creditosMes: a.creditosMes,
-    };
-    if (!planoDoPet.has(a.petId)) planoDoPet.set(a.petId, a.planoNome);
+  for (const { petId, linhas } of creditos) {
+    coberturas[petId] ??= {};
+    for (const l of linhas) {
+      coberturas[petId][l.servico_id] = { planoNome: l.plano_nome, saldo: l.saldo, creditosMes: l.quantidade };
+      if (!planoDoPet.has(petId)) planoDoPet.set(petId, l.plano_nome);
+    }
   }
 
   return {
@@ -309,8 +308,9 @@ export async function agendarPublico(params: {
       p_servico_id: params.servicoId,
     });
     if (assinaturaId) {
-      const { data: saldo } = await admin.rpc("saldo_plano", {
+      const { data: saldo } = await admin.rpc("saldo_plano_servico", {
         p_assinatura_id: assinaturaId,
+        p_servico_id: params.servicoId,
         p_competencia: inicio.startOf("month").toISODate(),
       });
       coberto = typeof saldo === "number" && saldo > 0;

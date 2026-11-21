@@ -1,4 +1,5 @@
 import { DateTime } from "luxon";
+import type { ServicoExtra } from "@/lib/servicos-extras";
 import type { Adicional } from "@/lib/adicionais";
 
 export const ZONE = "America/Sao_Paulo";
@@ -26,6 +27,12 @@ export type AgendamentoConcluido = {
   valor_centavos: number | null;
   origem_plano: boolean;
   adicionais?: Adicional[] | null;
+  /** Outros serviços do mesmo atendimento. */
+  servicosExtras?: ServicoExtra[] | null;
+  /** Recebido no caixa pelo agendamento: aparece, mas não soma no extrato. */
+  pagoEm?: string | null;
+  /** Ainda vai acontecer (só informativo no extrato, valor zero). */
+  agendado?: boolean;
   /** Prêmio do cartão fidelidade usado neste atendimento. */
   fidelidade_resgate?: boolean;
   pet: { id: string; nome: string; tutor_id: string };
@@ -64,6 +71,11 @@ export type ItemFechamento = {
   servicoNome?: string;
   /** Mensalidade: valor a mais de um pet adicional no plano de outro pet. */
   petAdicional?: boolean;
+  /** Já recebido no caixa pelo agendamento: valorCentavos fica 0 e o valor pago vai aqui. */
+  pagoNoCaixa?: boolean;
+  valorPagoCentavos?: number;
+  /** Atendimento do plano que ainda vai acontecer neste mês (só informativo). */
+  agendado?: boolean;
 };
 
 export type FechamentoTutor = {
@@ -128,17 +140,36 @@ export function calcularFechamentos(input: {
 
   const ordenados = [...input.agendamentos].sort((x, y) => x.inicio.localeCompare(y.inicio));
   for (const ag of ordenados) {
+    // Pago no caixa: continua listado, mas não soma no que falta pagar.
+    const pago = (valor: number): Pick<ItemFechamento, "valorCentavos" | "pagoNoCaixa" | "valorPagoCentavos"> =>
+      ag.pagoEm && valor > 0 ? { valorCentavos: 0, pagoNoCaixa: true, valorPagoCentavos: valor } : { valorCentavos: valor };
+    const extraInfo = ag.agendado ? { agendado: true } : {};
     const valor = ag.origem_plano ? 0 : (ag.valor_centavos ?? ag.servico.preco_centavos);
     push(ag.pet.tutor_id, {
       tipo: "servico",
       descricao: ag.fidelidade_resgate ? `${ag.servico.nome} (prêmio fidelidade)` : ag.servico.nome,
       petNome: ag.pet.nome,
       data: ag.inicio,
-      valorCentavos: valor,
+      ...pago(valor),
       cobertoPlano: ag.origem_plano,
       agendamentoId: ag.id,
       ...(ag.origem_plano && ag.plano ? { planoNome: ag.plano.nome, creditosMes: ag.plano.creditos_mes } : {}),
+      ...extraInfo,
     });
+    // Outros serviços do mesmo horário: do plano (crédito) ou cobrados.
+    for (const sv of ag.servicosExtras ?? []) {
+      push(ag.pet.tutor_id, {
+        tipo: "servico",
+        descricao: sv.nome,
+        petNome: ag.pet.nome,
+        data: ag.inicio,
+        ...pago(sv.assinaturaId ? 0 : sv.valorCentavos),
+        cobertoPlano: !!sv.assinaturaId,
+        agendamentoId: ag.id,
+        ...(sv.assinaturaId && sv.planoNome ? { planoNome: sv.planoNome } : {}),
+        ...extraInfo,
+      });
+    }
     // Extras são cobrados mesmo quando o banho é coberto pelo plano.
     for (const extra of ag.adicionais ?? []) {
       push(ag.pet.tutor_id, {
@@ -146,7 +177,7 @@ export function calcularFechamentos(input: {
         descricao: extra.descricao,
         petNome: ag.pet.nome,
         data: ag.inicio,
-        valorCentavos: extra.valorCentavos,
+        ...pago(extra.valorCentavos),
         agendamentoId: ag.id,
       });
     }
@@ -171,8 +202,15 @@ export function totalizar(fechamentos: FechamentoTutor[]): {
   let mensalidades = 0;
   for (const f of fechamentos) {
     previsto += f.totalCentavos;
+    const vistos = new Set<string>();
     for (const i of f.itens) {
+      if (i.agendado) continue;
       if (i.tipo === "servico") {
+        // Vários serviços no mesmo horário contam como um atendimento.
+        if (i.agendamentoId) {
+          if (vistos.has(i.agendamentoId)) continue;
+          vistos.add(i.agendamentoId);
+        }
         atendimentos += 1;
         if (i.cobertoPlano) cobertos += 1;
       } else if (i.tipo === "mensalidade") {

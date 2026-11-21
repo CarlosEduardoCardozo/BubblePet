@@ -32,7 +32,7 @@ export async function assinarPlano(
 
   const { data: plano, error: planoError } = await supabase
     .from("planos")
-    .select("creditos_mes, preco_centavos")
+    .select("creditos_mes, preco_centavos, servico_id, plano_itens(servico_id, quantidade)")
     .eq("id", planoId)
     .single();
   if (planoError || !plano) return { error: "Plano não encontrado." };
@@ -64,15 +64,19 @@ export async function assinarPlano(
     .startOf("month")
     .toISODate();
 
-  const { error: movimentoError } = await supabase
-    .from("creditos_movimentos")
-    .insert({
+  // Créditos do mês atual, um saldo por serviço do plano.
+  const itens = (plano.plano_itens as { servico_id: string; quantidade: number }[] | null) ?? [];
+  const lista = itens.length > 0 ? itens : [{ servico_id: plano.servico_id, quantidade: plano.creditos_mes }];
+  const { error: movimentoError } = await supabase.from("creditos_movimentos").insert(
+    lista.map((i) => ({
       petshop_id: petshopId,
       assinatura_id: assinatura.id,
       tipo: "renovacao",
-      quantidade: plano.creditos_mes,
+      quantidade: i.quantidade,
+      servico_id: i.servico_id,
       competencia,
-    });
+    }))
+  );
   if (movimentoError) return { error: mensagemErroBanco(movimentoError) };
 
   revalidatePath("/tutores-pets");

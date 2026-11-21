@@ -12,6 +12,12 @@ export type DataBanho = {
   valorCentavos: number;
   /** Extras do mesmo atendimento (desembolo...). */
   adicionais: { descricao: string; valorCentavos: number }[];
+  /** Serviço da linha (num plano com vários serviços). */
+  servicoNome?: string;
+  /** Recebido no caixa pelo agendamento (valor pago). */
+  pagoNoCaixaCentavos?: number;
+  /** Ainda vai acontecer. */
+  agendado?: boolean;
 };
 
 /** Plano do pet no extrato: a mensalidade e os banhos que ele cobriu. */
@@ -117,6 +123,9 @@ export function resumirFechamento(itens: ItemFechamento[]): ResumoFechamento {
       coberto: !!i.cobertoPlano,
       valorCentavos: i.valorCentavos,
       adicionais: [],
+      servicoNome: i.descricao,
+      ...(i.pagoNoCaixa ? { pagoNoCaixaCentavos: i.valorPagoCentavos ?? 0 } : {}),
+      ...(i.agendado ? { agendado: true } : {}),
     };
 
     if (i.cobertoPlano) {
@@ -124,7 +133,7 @@ export function resumirFechamento(itens: ItemFechamento[]): ResumoFechamento {
       p.banhos.push(data);
       p.creditosMes = p.creditosMes ?? i.creditosMes ?? null;
       p.servicoNome = p.servicoNome ?? i.descricao;
-      if (i.agendamentoId) porAgendamento.set(i.agendamentoId, { data, grupo: p });
+      if (i.agendamentoId && !porAgendamento.has(i.agendamentoId)) porAgendamento.set(i.agendamentoId, { data, grupo: p });
       continue;
     }
 
@@ -144,7 +153,7 @@ export function resumirFechamento(itens: ItemFechamento[]): ResumoFechamento {
     s.datas.push(data);
     s.quantidade += 1;
     s.subtotalCentavos += i.valorCentavos;
-    if (i.agendamentoId) porAgendamento.set(i.agendamentoId, { data, grupo: s });
+    if (i.agendamentoId && !porAgendamento.has(i.agendamentoId)) porAgendamento.set(i.agendamentoId, { data, grupo: s });
   }
 
   let totalAdicionais = 0;
@@ -171,18 +180,19 @@ export function resumirFechamento(itens: ItemFechamento[]): ResumoFechamento {
   }
 
   const banhosPlano = Array.from(pets.values()).reduce(
-    (n, g) => n + g.planos.reduce((m, p) => m + p.banhos.length, 0),
+    (n, g) => n + g.planos.reduce((m, p) => m + p.banhos.filter((b) => !b.agendado).length, 0),
     0
   );
-  const primeiro = servicosOrdenados[0]?.data;
-  const ultimo = servicosOrdenados[servicosOrdenados.length - 1]?.data;
+  const realizados = servicosOrdenados.filter((i) => !i.agendado);
+  const primeiro = realizados[0]?.data;
+  const ultimo = realizados[realizados.length - 1]?.data;
   const fmt = (iso: string) => DateTime.fromISO(iso).setZone(ZONE).toFormat("dd/LL");
 
   return {
     pets: Array.from(pets.values()),
-    totalBanhos: servicosOrdenados.length,
+    totalBanhos: realizados.length,
     banhosPlano,
-    banhosAvulsos: servicosOrdenados.length - banhosPlano,
+    banhosAvulsos: realizados.length - banhosPlano,
     totalCentavos: itens.reduce((s, i) => s + i.valorCentavos, 0),
     totalAdicionaisCentavos: totalAdicionais,
     periodo:

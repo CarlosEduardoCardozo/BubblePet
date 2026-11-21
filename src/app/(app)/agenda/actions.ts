@@ -17,6 +17,18 @@ import { precoParaPorte } from "@/lib/servico-preco";
 import { normalizePhoneBR } from "@/lib/phone";
 import { DateTime } from "luxon";
 import { ZONE } from "@/lib/agenda/slots";
+import {
+  doBanco,
+  duracaoServicosExtras,
+  lerPedidosExtras,
+  paraBanco,
+  somaServicosExtras,
+  type ServicoExtra,
+  type ServicoExtraPedido,
+} from "@/lib/servicos-extras";
+import { somaAdicionais } from "@/lib/adicionais";
+import { lancarEntrada } from "@/lib/lancamentos-entrada";
+import { hojeISO } from "@/lib/lancamentos";
 
 type ActionResult = { error: string } | { success: true };
 
@@ -54,17 +66,104 @@ async function servicoParaPet(
   supabase: SupabaseClient,
   servicoId: string,
   petId: string
-): Promise<{ duracaoMin: number; precoCentavos: number } | null> {
+): Promise<{ nome: string; duracaoMin: number; precoCentavos: number } | null> {
   const [{ data: servico }, { data: pet }] = await Promise.all([
     supabase
       .from("servicos")
-      .select("duracao_min, preco_centavos, preco_pequeno_centavos, preco_medio_centavos, preco_grande_centavos")
+      .select("nome, duracao_min, preco_centavos, preco_pequeno_centavos, preco_medio_centavos, preco_grande_centavos")
       .eq("id", servicoId)
       .maybeSingle(),
     supabase.from("pets").select("porte").eq("id", petId).maybeSingle(),
   ]);
   if (!servico) return null;
-  return { duracaoMin: servico.duracao_min, precoCentavos: precoParaPorte(servico, pet?.porte) };
+  return { nome: servico.nome, duracaoMin: servico.duracao_min, precoCentavos: precoParaPorte(servico, pet?.porte) };
+}
+
+type InfoServico = { nome: string; duracaoMin: number; precoCentavos: number };
+
+/** Nome, duração e preço (pelo porte) de cada serviço extra pedido. */
+async function infosDosExtras(
+  supabase: SupabaseClient,
+  pedidos: ServicoExtraPedido[],
+  petId: string
+): Promise<Map<string, InfoServico> | { error: string }> {
+  const infos = new Map<string, InfoServico>();
+  for (const p of pedidos) {
+    const info = await servicoParaPet(supabase, p.servicoId, petId);
+    if (!info) return { error: "Serviço extra não encontrado" };
+    infos.set(p.servicoId, info);
+  }
+  return infos;
+}
+
+/**
+ * Monta os serviços extras do agendamento já criado. Quem pediu crédito do
+ * plano tenta consumir (a function confere o saldo do mês); sem crédito,
+ * entra com o valor informado ou o preço do serviço. `anteriores` mantém a
+ * cobertura de quem já usava crédito e devolve o crédito de quem saiu.
+ */
+async function aplicarExtras(
+  supabase: SupabaseClient,
+  agendamentoId: string,
+  pedidos: ServicoExtraPedido[],
+  infos: Map<string, InfoServico>,
+  anteriores: ServicoExtra[] = []
+): Promise<ServicoExtra[]> {
+  for (const antigo of anteriores) {
+    if (!antigo.assinaturaId) continue;
+    const pedido = pedidos.find((p) => p.servicoId === antigo.servicoId);
+    if (!pedido || !pedido.usarPlano) {
+      await supabase.rpc("estornar_credito_servico", {
+        p_agendamento_id: agendamentoId,
+        p_servico_id: antigo.servicoId,
+      });
+    }
+  }
+
+  const nomesPlano = new Map<string, string>();
+  const resultado: ServicoExtra[] = [];
+  for (const p of pedidos) {
+    const info = infos.get(p.servicoId)!;
+    let assinaturaId: string | null = null;
+    if (p.usarPlano) {
+      const { data } = await supabase.rpc("consumir_credito_servico", {
+        p_agendamento_id: agendamentoId,
+        p_servico_id: p.servicoId,
+      });
+      assinaturaId = (data as string | null) ?? null;
+    }
+    let planoNome: string | null = null;
+    if (assinaturaId) {
+      if (!nomesPlano.has(assinaturaId)) {
+        const { data } = await supabase
+          .from("assinaturas")
+          .select("planos(nome)")
+          .eq("id", assinaturaId)
+          .maybeSingle();
+        const plano = data?.planos as unknown as { nome: string } | { nome: string }[] | null;
+        nomesPlano.set(assinaturaId, (Array.isArray(plano) ? plano[0]?.nome : plano?.nome) ?? "Plano");
+      }
+      planoNome = nomesPlano.get(assinaturaId)!;
+    }
+    resultado.push({
+      servicoId: p.servicoId,
+      nome: info.nome,
+      duracaoMin: info.duracaoMin,
+      valorCentavos: assinaturaId ? 0 : (p.valorCentavos ?? info.precoCentavos),
+      assinaturaId,
+      planoNome,
+    });
+  }
+  return resultado;
+}
+
+/** Valor do serviço principal digitado no formulário (centavos); vazio = preço do serviço. */
+function valorDoFormulario(formData: FormData): number | null | { error: string } {
+  const bruto = formData.get("valor");
+  if (bruto === null || String(bruto).trim() === "") return null;
+  const n = Number(bruto);
+  if (!Number.isInteger(n) || n < 0 || n > 10_000_00) return { error: "Valor do serviço inválido" };
+  return n;
 }
 
 const agendamentoFields = z.object({
@@ -88,7 +187,20 @@ function lerFormulario(formData: FormData) {
   if (Number.isNaN(inicio.getTime())) return { error: "Horário inválido" } as const;
   const extras = lerAdicionais(formData.get("adicionais"));
   if (!extras.ok) return { error: extras.erro } as const;
-  return { dados: parsed.data, inicio, adicionais: extras.adicionais } as const;
+  const servicosExtras = lerPedidosExtras(formData.get("servicos_extras"));
+  if (!servicosExtras.ok) return { error: servicosExtras.erro } as const;
+  if (servicosExtras.pedidos.some((p) => p.servicoId === parsed.data.servico_id)) {
+    return { error: "O serviço principal não pode aparecer de novo nos serviços extras." } as const;
+  }
+  const valor = valorDoFormulario(formData);
+  if (valor !== null && typeof valor === "object") return { error: valor.error } as const;
+  return {
+    dados: parsed.data,
+    inicio,
+    adicionais: extras.adicionais,
+    pedidosExtras: servicosExtras.pedidos,
+    valor,
+  } as const;
 }
 
 const REPETICOES = {
@@ -129,7 +241,7 @@ function rotuloData(d: Date): string {
 async function criarAgendamentos(formData: FormData, usarPlano: boolean): Promise<ResultadoCriacao> {
   const form = lerFormulario(formData);
   if ("error" in form) return { error: form.error ?? "Dados inválidos" };
-  const { dados, inicio, adicionais } = form;
+  const { dados, inicio, adicionais, pedidosExtras, valor } = form;
   const datas = datasDaSerie(inicio, formData);
   if ("error" in datas) return datas;
 
@@ -138,6 +250,9 @@ async function criarAgendamentos(formData: FormData, usarPlano: boolean): Promis
 
   const servico = await servicoParaPet(supabase, dados.servico_id, dados.pet_id);
   if (!servico) return { error: "Serviço não encontrado" };
+  const infos = await infosDosExtras(supabase, pedidosExtras, dados.pet_id);
+  if ("error" in infos) return infos;
+  const duracaoTotal = servico.duracaoMin + duracaoServicosExtras(Array.from(infos.values()));
 
   const avisosEscolhidos = lembretesDoFormulario(formData);
   const recorrenciaId = datas.length > 1 ? crypto.randomUUID() : null;
@@ -157,6 +272,7 @@ async function criarAgendamentos(formData: FormData, usarPlano: boolean): Promis
         p_servico_id: dados.servico_id,
         p_inicio: data.toISOString(),
         p_observacoes: dados.observacoes || null,
+        p_fim: new Date(data.getTime() + duracaoTotal * 60_000).toISOString(),
       });
       if (!error && agId) {
         id = agId as string;
@@ -179,7 +295,7 @@ async function criarAgendamentos(formData: FormData, usarPlano: boolean): Promis
     }
 
     if (!id) {
-      const fim = new Date(data.getTime() + servico.duracaoMin * 60_000);
+      const fim = new Date(data.getTime() + duracaoTotal * 60_000);
       const { data: criado, error } = await supabase
         .from("agendamentos")
         .insert({
@@ -189,7 +305,7 @@ async function criarAgendamentos(formData: FormData, usarPlano: boolean): Promis
           inicio: data.toISOString(),
           fim: fim.toISOString(),
           observacoes: dados.observacoes || null,
-          valor_centavos: servico.precoCentavos,
+          valor_centavos: valor ?? servico.precoCentavos,
           adicionais,
           recorrencia_id: recorrenciaId,
           ...(avisosEscolhidos ? { avisos: avisosEscolhidos } : {}),
@@ -203,6 +319,10 @@ async function criarAgendamentos(formData: FormData, usarPlano: boolean): Promis
         continue;
       }
       id = criado.id;
+    }
+    if (pedidosExtras.length > 0) {
+      const extras = await aplicarExtras(supabase, id!, pedidosExtras, infos);
+      await supabase.from("agendamentos").update({ servicos_extras: paraBanco(extras) }).eq("id", id!);
     }
     criados.push(id!);
   }
@@ -253,13 +373,22 @@ export async function updateAgendamentoStatus(
 }
 
 /**
- * Edita horário, serviço, observações e adicionais. Agendamento pago com
- * plano só muda de horário (o crédito está amarrado ao serviço do plano). A
- * duração e o preço sempre vêm do serviço no banco, pelo porte do pet.
+ * Edita horário, serviço, valor, serviços extras, observações e adicionais.
+ * Atendimento pago com plano não troca o serviço principal (o crédito está
+ * amarrado a ele). A duração sempre vem dos serviços no banco, pelo porte do
+ * pet; o valor pode ser ajustado à mão (desconto, cliente antigo...).
  */
 export async function updateAgendamento(
   id: string,
-  dados: { inicio: string; servicoId: string; observacoes: string; adicionais?: Adicional[] }
+  dados: {
+    inicio: string;
+    servicoId: string;
+    observacoes: string;
+    adicionais?: Adicional[];
+    /** Valor do serviço principal; null/ausente = mantém o combinado ou o preço do serviço. */
+    valorCentavos?: number | null;
+    servicosExtras?: ServicoExtraPedido[];
+  }
 ): Promise<ActionResult> {
   const bloqueio = await semPermissao("agenda");
   if (bloqueio) return bloqueio;
@@ -272,12 +401,27 @@ export async function updateAgendamento(
     if (!extras.ok) return { error: extras.erro };
     adicionais = extras.adicionais;
   }
+  let pedidos: ServicoExtraPedido[] | undefined;
+  if (dados.servicosExtras !== undefined) {
+    const lidos = lerPedidosExtras(dados.servicosExtras);
+    if (!lidos.ok) return { error: lidos.erro };
+    pedidos = lidos.pedidos;
+    if (pedidos.some((p) => p.servicoId === dados.servicoId)) {
+      return { error: "O serviço principal não pode aparecer de novo nos serviços extras." };
+    }
+  }
+  if (
+    dados.valorCentavos != null &&
+    (!Number.isInteger(dados.valorCentavos) || dados.valorCentavos < 0 || dados.valorCentavos > 10_000_00)
+  ) {
+    return { error: "Valor do serviço inválido" };
+  }
 
   const supabase = await createClient();
 
   const { data: atual } = await supabase
     .from("agendamentos")
-    .select("id, pet_id, servico_id, origem_plano, status, valor_centavos, fidelidade_resgate")
+    .select("id, pet_id, servico_id, origem_plano, status, valor_centavos, fidelidade_resgate, servicos_extras, pago_em, adicionais")
     .eq("id", id)
     .maybeSingle();
   if (!atual) return { error: "Agendamento não encontrado." };
@@ -285,7 +429,7 @@ export async function updateAgendamento(
     return { error: "Esse atendimento usa o prêmio fidelidade. Desfaça o prêmio antes de trocar o serviço." };
   }
   if (atual.status === "concluido" || atual.status === "cancelado") {
-    return { error: "Agendamento encerrado não pode ser alterado." };
+    return { error: "Agendamento encerrado não pode ser alterado. Reabra ele primeiro." };
   }
   if (atual.origem_plano && dados.servicoId !== atual.servico_id) {
     return { error: "Esse atendimento usa crédito do plano — dá pra mudar o horário, não o serviço." };
@@ -294,10 +438,40 @@ export async function updateAgendamento(
   const servico = await servicoParaPet(supabase, dados.servicoId, atual.pet_id);
   if (!servico) return { error: "Serviço não encontrado" };
 
-  const fim = new Date(inicio.getTime() + servico.duracaoMin * 60_000);
+  const anteriores = doBanco(atual.servicos_extras);
+  const infos = pedidos ? await infosDosExtras(supabase, pedidos, atual.pet_id) : null;
+  if (infos && "error" in infos) return infos;
+  const duracaoExtras = infos ? duracaoServicosExtras(Array.from(infos.values())) : duracaoServicosExtras(anteriores);
+  const fim = new Date(inicio.getTime() + (servico.duracaoMin + duracaoExtras) * 60_000);
 
   // Mesmo serviço: mantém o preço combinado na hora de marcar.
   const mesmoServico = dados.servicoId === atual.servico_id;
+  const valor = atual.origem_plano
+    ? 0
+    : dados.valorCentavos != null
+      ? dados.valorCentavos
+      : mesmoServico && atual.valor_centavos != null
+        ? atual.valor_centavos
+        : servico.precoCentavos;
+
+  if (atual.pago_em) {
+    // Já recebido no caixa: horário e observação mudam, o total não.
+    const extrasNovos = pedidos
+      ? pedidos.reduce((soma, p) => {
+          const antigo = anteriores.find((x) => x.servicoId === p.servicoId);
+          if (p.usarPlano && antigo?.assinaturaId) return soma;
+          const info = infos && !("error" in infos) ? infos.get(p.servicoId) : undefined;
+          return soma + (p.valorCentavos ?? antigo?.valorCentavos ?? info?.precoCentavos ?? 0);
+        }, 0)
+      : somaServicosExtras(anteriores);
+    const adicAntigos = lerAdicionais(atual.adicionais);
+    const somaAdicAntigos = adicAntigos.ok ? somaAdicionais(adicAntigos.adicionais) : 0;
+    const totalNovo = valor + extrasNovos + (adicionais !== undefined ? somaAdicionais(adicionais) : somaAdicAntigos);
+    if (totalNovo !== totalDoAgendamento(atual)) {
+      return { error: "Esse atendimento já foi recebido no caixa. Desfaça o recebimento antes de mudar valores." };
+    }
+  }
+
   const { error } = await supabase
     .from("agendamentos")
     .update({
@@ -305,18 +479,278 @@ export async function updateAgendamento(
       fim: fim.toISOString(),
       servico_id: dados.servicoId,
       observacoes: dados.observacoes.trim() || null,
-      valor_centavos: atual.origem_plano
-        ? 0
-        : mesmoServico && atual.valor_centavos != null
-          ? atual.valor_centavos
-          : servico.precoCentavos,
+      valor_centavos: valor,
       ...(adicionais !== undefined ? { adicionais } : {}),
     })
     .eq("id", id);
   if (error) return { error: mensagemErroBanco(error) };
 
+  if (pedidos && infos && !("error" in infos)) {
+    // Quem já usava crédito continua usando (a function não consome de novo).
+    const extras = await aplicarExtras(supabase, id, pedidos, infos, anteriores);
+    const { error: erroExtras } = await supabase
+      .from("agendamentos")
+      .update({ servicos_extras: paraBanco(extras) })
+      .eq("id", id);
+    if (erroExtras) return { error: mensagemErroBanco(erroExtras) };
+  }
+
   revalidatePath("/agenda");
   revalidatePath("/dashboard");
+  return { success: true };
+}
+
+type SituacaoExtrato =
+  | { bloqueado: false }
+  | { bloqueado: true; fechamentoId: string; pago: boolean };
+
+/** Agendamento num extrato já enviado ou pago não muda sem reabrir o extrato. */
+async function situacaoExtrato(supabase: SupabaseClient, fechamentoId: string | null): Promise<SituacaoExtrato> {
+  if (!fechamentoId) return { bloqueado: false };
+  const { data } = await supabase
+    .from("fechamentos")
+    .select("id, status, enviado_em")
+    .eq("id", fechamentoId)
+    .maybeSingle();
+  if (!data || (data.status !== "pago" && !data.enviado_em)) return { bloqueado: false };
+  return { bloqueado: true, fechamentoId: data.id, pago: data.status === "pago" };
+}
+
+export type ResultadoReabrir =
+  | { success: true }
+  | { error: string; extratoBloqueado?: { pago: boolean } };
+
+const MSG_EXTRATO_ENVIADO =
+  "Esse atendimento já está num extrato enviado ao tutor. Reabra o extrato para poder mexer.";
+const MSG_EXTRATO_PAGO =
+  "Esse atendimento está num extrato já pago. Reabra o extrato (o pagamento sai do caixa) para poder mexer.";
+
+/** Concluído, falta ou cancelado volta a ficar agendado. */
+export async function reabrirAgendamento(id: string): Promise<ResultadoReabrir> {
+  const bloqueio = await semPermissao("agenda");
+  if (bloqueio) return bloqueio;
+  const supabase = await createClient();
+  const { data: atual } = await supabase
+    .from("agendamentos")
+    .select("id, status, fechamento_id")
+    .eq("id", id)
+    .maybeSingle();
+  if (!atual) return { error: "Agendamento não encontrado." };
+  if (atual.status === "agendado" || atual.status === "confirmado") return { success: true };
+
+  const extrato = await situacaoExtrato(supabase, atual.fechamento_id);
+  if (extrato.bloqueado) {
+    return {
+      error: extrato.pago ? MSG_EXTRATO_PAGO : MSG_EXTRATO_ENVIADO,
+      extratoBloqueado: { pago: extrato.pago },
+    };
+  }
+
+  const { error } = await supabase.from("agendamentos").update({ status: "agendado" }).eq("id", id);
+  if (error) return { error: mensagemErroBanco(error) };
+  revalidatePath("/agenda");
+  revalidatePath("/dashboard");
+  revalidatePath("/financeiro");
+  return { success: true };
+}
+
+/**
+ * Apaga o agendamento de vez: os créditos do plano voltam, o recebimento no
+ * caixa (se houver) sai junto e o horário fica livre.
+ */
+export async function apagarAgendamento(id: string): Promise<ResultadoReabrir> {
+  const bloqueio = await semPermissao("agenda");
+  if (bloqueio) return bloqueio;
+  const supabase = await createClient();
+  const { data: atual } = await supabase
+    .from("agendamentos")
+    .select("id, fechamento_id, pago_em")
+    .eq("id", id)
+    .maybeSingle();
+  if (!atual) return { error: "Agendamento não encontrado." };
+
+  const extrato = await situacaoExtrato(supabase, atual.fechamento_id);
+  if (extrato.bloqueado) {
+    return {
+      error: extrato.pago ? MSG_EXTRATO_PAGO : MSG_EXTRATO_ENVIADO,
+      extratoBloqueado: { pago: extrato.pago },
+    };
+  }
+
+  if (atual.pago_em) {
+    // Lançamentos do caixa exigem a permissão do financeiro (RLS).
+    const { error: erroCaixa } = await supabase.from("lancamentos").delete().eq("agendamento_id", id);
+    if (erroCaixa) return { error: "Esse atendimento foi recebido no caixa. Quem tem acesso ao financeiro precisa apagar." };
+  }
+
+  const { error } = await supabase.from("agendamentos").delete().eq("id", id);
+  if (error) return { error: mensagemErroBanco(error) };
+  revalidatePath("/agenda");
+  revalidatePath("/dashboard");
+  revalidatePath("/financeiro");
+  revalidatePath("/caixa");
+  return { success: true };
+}
+
+/**
+ * Reabre, de dentro do agendamento, o extrato em que ele está: enviado volta
+ * a "não enviado"; pago volta a "em aberto" e o pagamento sai do caixa.
+ */
+export async function reabrirExtratoDoAgendamento(id: string): Promise<ActionResult> {
+  const bloqueio = await semPermissao("financeiro");
+  if (bloqueio) return { error: "Reabrir o extrato precisa da permissão do Financeiro." };
+  const supabase = await createClient();
+  const { data: atual } = await supabase
+    .from("agendamentos")
+    .select("fechamento_id")
+    .eq("id", id)
+    .maybeSingle();
+  if (!atual?.fechamento_id) return { success: true };
+  const fechamentoId = atual.fechamento_id;
+
+  const { data: fechamento } = await supabase
+    .from("fechamentos")
+    .select("status")
+    .eq("id", fechamentoId)
+    .maybeSingle();
+  if (fechamento?.status === "pago") {
+    const { error: erroCaixa } = await supabase
+      .from("lancamentos")
+      .delete()
+      .eq("fechamento_id", fechamentoId)
+      .eq("origem", "extrato");
+    if (erroCaixa) return { error: mensagemErroBanco(erroCaixa) };
+  }
+  const { error } = await supabase
+    .from("fechamentos")
+    .update({ status: "aberto", pago_em: null, enviado_em: null })
+    .eq("id", fechamentoId);
+  if (error) return { error: mensagemErroBanco(error) };
+
+  revalidatePath("/agenda");
+  revalidatePath("/financeiro");
+  revalidatePath("/caixa");
+  return { success: true };
+}
+
+/** Total a receber do atendimento: serviço (se não é do plano) + extras + adicionais. */
+function totalDoAgendamento(row: {
+  origem_plano: boolean;
+  valor_centavos: number | null;
+  adicionais: unknown;
+  servicos_extras: unknown;
+}): number {
+  const adic = lerAdicionais(row.adicionais);
+  return (
+    (row.origem_plano ? 0 : (row.valor_centavos ?? 0)) +
+    (adic.ok ? somaAdicionais(adic.adicionais) : 0) +
+    somaServicosExtras(doBanco(row.servicos_extras))
+  );
+}
+
+/**
+ * Recebe o avulso na hora, pelo próprio agendamento: o valor entra no caixa
+ * (com a taxa e o prazo da forma de pagamento) e o atendimento aparece no
+ * extrato do tutor como "pago no caixa", sem somar no total a pagar.
+ */
+export async function receberNoCaixa(
+  id: string,
+  pagamento: { metodoId: string; parcelas: number; data: string }
+): Promise<ActionResult> {
+  const bloqueio = await semPermissao("agenda");
+  if (bloqueio) return bloqueio;
+  if (!pagamento.metodoId) return { error: "Escolha a forma de pagamento." };
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(pagamento.data) || !DateTime.fromISO(pagamento.data).isValid) {
+    return { error: "Data inválida." };
+  }
+  if (pagamento.data > hojeISO()) return { error: "A data do pagamento não pode ser no futuro." };
+  const parcelas = Math.trunc(pagamento.parcelas);
+  if (!(parcelas >= 1 && parcelas <= 12)) return { error: "Parcelas inválidas." };
+
+  const supabase = await createClient();
+  const petshopId = await getCurrentPetshopId(supabase);
+  const { data: ag } = await supabase
+    .from("agendamentos")
+    .select(
+      "id, status, origem_plano, valor_centavos, adicionais, servicos_extras, pago_em, fechamento_id, pets(nome, tutores(nome)), servicos(nome)"
+    )
+    .eq("id", id)
+    .maybeSingle();
+  if (!ag) return { error: "Agendamento não encontrado." };
+  if (ag.pago_em) return { error: "Esse atendimento já foi recebido." };
+  if (ag.status === "cancelado" || ag.status === "faltou") return { error: "Atendimento cancelado ou com falta não é cobrado." };
+  const extrato = await situacaoExtrato(supabase, ag.fechamento_id);
+  if (extrato.bloqueado) return { error: "Esse atendimento já está num extrato enviado. Receba pelo Financeiro." };
+
+  const total = totalDoAgendamento(ag);
+  if (total <= 0) return { error: "Nada a receber neste atendimento." };
+
+  const pet = ag.pets as unknown as { nome: string; tutores: { nome: string } | null } | null;
+  const servico = ag.servicos as unknown as { nome: string } | null;
+  const { data: categoria } = await supabase
+    .from("categorias_financeiras")
+    .select("id")
+    .eq("tipo", "entrada")
+    .eq("nome", "Banho e tosa")
+    .maybeSingle();
+
+  const entrada = await lancarEntrada(supabase, {
+    petshopId,
+    valorCentavos: total,
+    metodoId: pagamento.metodoId,
+    parcelas,
+    data: pagamento.data,
+    descricao: [servico?.nome, pet?.nome, pet?.tutores?.nome].filter(Boolean).join(" · "),
+    categoriaId: categoria?.id ?? null,
+    caixaId: null,
+    origem: "agendamento",
+    agendamentoId: id,
+  });
+  if ("error" in entrada) {
+    return {
+      error: entrada.error.toLowerCase().includes("row-level security") || entrada.error.toLowerCase().includes("permiss")
+        ? "Lançar no caixa precisa da permissão do Financeiro."
+        : entrada.error,
+    };
+  }
+
+  const { error } = await supabase
+    .from("agendamentos")
+    .update({ pago_em: new Date().toISOString() })
+    .eq("id", id);
+  if (error) {
+    await supabase.from("lancamentos").delete().eq("agendamento_id", id);
+    return { error: mensagemErroBanco(error) };
+  }
+
+  revalidatePath("/agenda");
+  revalidatePath("/financeiro");
+  revalidatePath("/caixa");
+  return { success: true };
+}
+
+/** Desfaz o recebimento: sai do caixa e volta a entrar no extrato do tutor. */
+export async function desfazerRecebimento(id: string): Promise<ActionResult> {
+  const bloqueio = await semPermissao("agenda");
+  if (bloqueio) return bloqueio;
+  const supabase = await createClient();
+  const { data: ag } = await supabase
+    .from("agendamentos")
+    .select("id, fechamento_id")
+    .eq("id", id)
+    .maybeSingle();
+  if (!ag) return { error: "Agendamento não encontrado." };
+  const extrato = await situacaoExtrato(supabase, ag.fechamento_id);
+  if (extrato.bloqueado) return { error: extrato.pago ? MSG_EXTRATO_PAGO : MSG_EXTRATO_ENVIADO };
+
+  const { error: erroCaixa } = await supabase.from("lancamentos").delete().eq("agendamento_id", id);
+  if (erroCaixa) return { error: "Tirar do caixa precisa da permissão do Financeiro." };
+  const { error } = await supabase.from("agendamentos").update({ pago_em: null }).eq("id", id);
+  if (error) return { error: mensagemErroBanco(error) };
+
+  revalidatePath("/agenda");
+  revalidatePath("/financeiro");
+  revalidatePath("/caixa");
   return { success: true };
 }
 
@@ -334,11 +768,14 @@ export async function atualizarAdicionais(id: string, adicionaisRaw: Adicional[]
   const supabase = await createClient();
   const { data: atual } = await supabase
     .from("agendamentos")
-    .select("id, status, fechamentos(status, enviado_em)")
+    .select("id, status, pago_em, fechamentos(status, enviado_em)")
     .eq("id", id)
     .maybeSingle();
   if (!atual) return { error: "Agendamento não encontrado." };
   if (atual.status === "cancelado") return { error: "Agendamento cancelado não recebe adicionais." };
+  if (atual.pago_em) {
+    return { error: "Esse atendimento já foi recebido no caixa. Desfaça o recebimento antes de mudar valores." };
+  }
   const fechamento = atual.fechamentos as unknown as { status: string; enviado_em: string | null } | null;
   if (fechamento && (fechamento.status === "pago" || fechamento.enviado_em)) {
     return { error: "Esse atendimento já foi cobrado num extrato enviado. Lance o extra no próximo atendimento." };

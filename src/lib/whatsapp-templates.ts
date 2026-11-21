@@ -151,9 +151,27 @@ export function templateRespostaCancelado(args: {
   });
 }
 
-function linhaData(d: { data: string; diaSemana: string; adicionais: Adicional[] }, valor?: string): string {
+function linhaData(
+  d: {
+    data: string;
+    diaSemana: string;
+    adicionais: Adicional[];
+    servicoNome?: string;
+    pagoNoCaixaCentavos?: number;
+    agendado?: boolean;
+  },
+  valor?: string,
+  mostrarServico = false
+): string {
   const extras = d.adicionais.map((a) => ` + ${a.descricao} ${formatCentavos(a.valorCentavos)}`).join("");
-  return `• ${d.data} (${d.diaSemana})${valor ? ` — ${valor}` : ""}${extras}`;
+  const servico = mostrarServico && d.servicoNome ? ` ${d.servicoNome}` : "";
+  const valorTexto =
+    d.pagoNoCaixaCentavos != null
+      ? ` — ${formatCentavos(d.pagoNoCaixaCentavos)} (já pago)`
+      : valor
+        ? ` — ${valor}`
+        : "";
+  return `• ${d.data} (${d.diaSemana})${servico}${d.agendado ? " — agendado" : ""}${valorTexto}${extras}`;
 }
 
 /**
@@ -180,8 +198,13 @@ export function detalhesFechamento(resumo: ResumoFechamento): string {
       if (plano.banhos.length > 0) {
         const cota = plano.creditosMes ? ` de ${plano.creditosMes}` : "";
         const palavra = (plano.servicoNome ?? "banho").toLowerCase().includes("banho") ? "Banhos" : "Atendimentos";
-        linhas.push(`${palavra} do plano (${plano.banhos.length}${cota}):`);
-        for (const d of plano.banhos) linhas.push(linhaData(d));
+        const usados = plano.banhos.filter((d) => !d.agendado).length;
+        const agendados = plano.banhos.length - usados;
+        linhas.push(
+          `${palavra} do plano (${usados}${cota}${agendados > 0 ? `, ${agendados} agendado${agendados === 1 ? "" : "s"}` : ""}):`
+        );
+        const variosServicos = new Set(plano.banhos.map((d) => d.servicoNome)).size > 1;
+        for (const d of plano.banhos) linhas.push(linhaData(d, undefined, variosServicos));
       }
     }
 

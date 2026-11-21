@@ -23,7 +23,8 @@ import { nomeFeriado } from "@/lib/feriados-br";
 import { horasAtivas, rotuloHoras, type AvisosConfig } from "@/lib/avisos";
 import { Combobox } from "@/components/shared/Combobox";
 import { createClient } from "@/lib/supabase/client";
-import { formatCentavos } from "@/lib/currency";
+import { formatCentavos, parseCentavos } from "@/lib/currency";
+import { CurrencyInput } from "@/components/shared/CurrencyInput";
 import { PORTES, precoParaPorte } from "@/lib/servico-preco";
 import {
   calcularHorariosLivres,
@@ -46,6 +47,15 @@ import {
   totalDasLinhas,
   type LinhaAdicional,
 } from "./AdicionaisEditor";
+import {
+  ServicosExtrasEditor,
+  duracaoDasLinhas,
+  pedidosDasLinhas,
+  rotuloCredito,
+  useCreditosDoPet,
+  valorDaLinha,
+  type LinhaServicoExtra,
+} from "./ServicosExtrasEditor";
 import type { PetOption, ServicoOption, TutorOption } from "./AgendaView";
 
 type PlanoInfo = { saldo: number; creditosMes: number; planoNome: string };
@@ -85,8 +95,10 @@ export function NovoAgendamentoSheet({
   const [servicoId, setServicoId] = useState("");
   const [data, setData] = useState("");
   const [hora, setHora] = useState("");
-  const [planoInfo, setPlanoInfo] = useState<PlanoInfo | null | undefined>(undefined);
   const [usarPlano, setUsarPlano] = useState(true);
+  // Valor do serviço principal digitado à mão (vazio = preço do serviço).
+  const [valorTexto, setValorTexto] = useState("");
+  const [servicosExtras, setServicosExtras] = useState<LinhaServicoExtra[]>([]);
   // Já vem como o petshop configurou (confirmação e lembretes pré-ativados);
   // aqui dá para desligar ou ajustar só para este agendamento.
   const [avisar, setAvisar] = useState(avisos.confirmacao_ativa);
@@ -124,9 +136,19 @@ export function NovoAgendamentoSheet({
 
   const pet = todosPets.find((p) => p.id === petId) ?? null;
   const servico = servicos.find((s) => s.id === servicoId) ?? null;
-  const duracao = servico?.duracao_min ?? 30;
+  const creditos = useCreditosDoPet(petId, data);
+  const planoInfo: PlanoInfo | null | undefined = (() => {
+    if (!petId || !servicoId || creditos === undefined) return undefined;
+    const c = creditos.get(servicoId);
+    return c ? { saldo: c.saldo, creditosMes: c.quantidade, planoNome: c.planoNome } : null;
+  })();
+  const duracao = (servico?.duracao_min ?? 30) + duracaoDasLinhas(servicosExtras, servicos);
   const precoServico = servico ? precoParaPorte(servico, pet?.porte) : 0;
   const totalAdicionais = totalDasLinhas(adicionais);
+  const totalServicosExtras = servicosExtras.reduce(
+    (soma, l) => soma + valorDaLinha(l, servicos, pet?.porte ?? null, creditos),
+    0
+  );
 
   // Horários que cabem no dia escolhido; a hora do slot clicado entra mesmo
   // fora do passo de 30 min (a grade é de 15 em 15).
@@ -154,54 +176,6 @@ export function NovoAgendamentoSheet({
   const foraDoExpediente = !!data && !diaAberto(data, horario);
   const diaFechado = foraDoExpediente && !excecaoDia;
   const motivoFechado = data ? nomeFeriado(data) : null;
-
-  useEffect(() => {
-    if (!petId || !servicoId || !data) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- limpa o crédito de uma seleção anterior antes de buscar a nova
-      setPlanoInfo(undefined);
-      return;
-    }
-    let cancelled = false;
-
-    (async () => {
-      const supabase = createClient();
-      // O pet pode estar no plano como titular ou como pet adicional.
-      const { data: assinaturaId } = await supabase.rpc("assinatura_do_pet", {
-        p_pet_id: petId,
-        p_servico_id: servicoId,
-      });
-      const { data: rows } = assinaturaId
-        ? await supabase.from("assinaturas").select("id, planos(nome, creditos_mes)").eq("id", assinaturaId).limit(1)
-        : { data: null };
-
-      const row = rows?.[0] as unknown as
-        | { id: string; planos: { nome: string; creditos_mes: number } }
-        | undefined;
-      if (!row) {
-        if (!cancelled) setPlanoInfo(null);
-        return;
-      }
-
-      // saldo_plano conta com os créditos de um mês futuro ainda não renovado.
-      const competencia = DateTime.fromISO(data, { zone: ZONE }).startOf("month").toISODate();
-      const { data: saldo } = await supabase.rpc("saldo_plano", {
-        p_assinatura_id: row.id,
-        p_competencia: competencia,
-      });
-
-      if (!cancelled) {
-        setPlanoInfo({
-          saldo: typeof saldo === "number" ? saldo : 0,
-          creditosMes: row.planos.creditos_mes,
-          planoNome: row.planos.nome,
-        });
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [petId, servicoId, data]);
 
   // Escolheu o pet: traz o serviço da última vez (se nenhum foi escolhido ainda).
   useEffect(() => {
@@ -278,8 +252,9 @@ export function NovoAgendamentoSheet({
       setError(null);
       setPetId("");
       setServicoId("");
-      setPlanoInfo(undefined);
       setUsarPlano(true);
+      setValorTexto("");
+      setServicosExtras([]);
       setSlotAplicado(0);
       setAdicionais([]);
       setMostrarAdicionais(false);
@@ -316,8 +291,9 @@ export function NovoAgendamentoSheet({
     semanasEntre && inicioEscolhido?.isValid
       ? Array.from({ length: nVezes }, (_, i) => inicioEscolhido.plus({ weeks: i * semanasEntre }))
       : [];
-  const valorBase = usandoCredito ? 0 : precoServico;
-  const total = valorBase + totalAdicionais;
+  const valorDigitado = valorTexto.trim() ? parseCentavos(valorTexto) : null;
+  const valorBase = usandoCredito ? 0 : (valorDigitado ?? precoServico);
+  const total = valorBase + totalServicosExtras + totalAdicionais;
 
   function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -341,7 +317,19 @@ export function NovoAgendamentoSheet({
       return;
     }
 
+    const pedidosExtras = pedidosDasLinhas(servicosExtras, creditos);
+    if (!pedidosExtras.ok) {
+      setError(pedidosExtras.erro);
+      return;
+    }
+    if (valorTexto.trim() && valorDigitado == null) {
+      setError("Valor do serviço inválido.");
+      return;
+    }
+
     const formData = new FormData(event.currentTarget);
+    formData.set("servicos_extras", JSON.stringify(pedidosExtras.pedidos));
+    if (!usandoCredito && valorDigitado != null) formData.set("valor", String(valorDigitado));
     formData.set("pet_id", petId);
     formData.set("servico_id", servicoId);
     formData.set("inicio", inicioEscolhido.toISO()!);
@@ -429,14 +417,18 @@ export function NovoAgendamentoSheet({
             <FormSelect
               id="servico_id"
               value={servicoId}
-              onValueChange={setServicoId}
+              onValueChange={(id) => {
+                setServicoId(id);
+                setValorTexto("");
+                setServicosExtras((atual) => atual.filter((l) => l.servicoId !== id));
+              }}
               placeholder="Selecione um serviço"
               options={servicos.map((s) => ({
                 value: s.id,
                 label: s.nome,
                 hint: `${s.duracao_min} min · ${formatCentavos(precoParaPorte(s, pet?.porte))}${
                   pet?.porte ? ` (${rotuloPorte(pet.porte).toLowerCase()})` : ""
-                }`,
+                }${rotuloCredito(creditos?.get(s.id))}`,
               }))}
             />
             {ultimo && (
@@ -477,6 +469,25 @@ export function NovoAgendamentoSheet({
               </p>
             )}
           </div>
+
+          {servico && (
+            <div className="flex flex-col gap-1.5">
+              <Label>Outros serviços no mesmo horário</Label>
+              {servicosExtras.length === 0 && (
+                <p className="text-xs text-muted-foreground">
+                  Ex.: Banho + Hidratação. Soma o tempo e o valor; usa crédito do plano quando tiver.
+                </p>
+              )}
+              <ServicosExtrasEditor
+                linhas={servicosExtras}
+                onChange={setServicosExtras}
+                servicos={servicos}
+                servicoPrincipalId={servicoId}
+                porte={pet?.porte ?? null}
+                creditos={creditos}
+              />
+            </div>
+          )}
 
           <div className="grid grid-cols-2 gap-3">
             <div className="flex flex-col gap-1.5">
@@ -596,7 +607,9 @@ export function NovoAgendamentoSheet({
             {datasSerie.length > 0 && (
               <p className="text-xs text-muted-foreground">
                 {datasSerie.map((d) => d.toFormat("dd/LL")).join(" · ")} às {hora}.
-                {usandoCredito ? " Cada data usa um crédito do plano; sem crédito, entra como avulso." : ""}
+                {usandoCredito || servicosExtras.some((l) => l.usarPlano)
+                  ? " Cada data usa os créditos do plano daquele mês; sem crédito, entra como avulso."
+                  : ""}
                 {" "}Horário lotado em alguma data: ela é pulada e você é avisado.
               </p>
             )}
@@ -636,10 +649,35 @@ export function NovoAgendamentoSheet({
 
           {servico && (
             <div className="flex flex-col gap-1 rounded-xl border border-border px-3 py-2 text-sm">
-              <div className="flex justify-between">
+              <div className="flex items-center justify-between gap-3">
                 <span className="text-muted-foreground">{servico.nome}</span>
-                <span>{usandoCredito ? "Plano" : formatCentavos(valorBase)}</span>
+                {usandoCredito ? (
+                  <span className="font-medium text-primary">Plano</span>
+                ) : (
+                  <div className="w-32">
+                    <CurrencyInput
+                      aria-label={`Valor de ${servico.nome}`}
+                      value={valorTexto}
+                      placeholder={formatCentavos(precoServico).replace("R$", "").trim()}
+                      onChange={(e) => setValorTexto(e.target.value)}
+                      className="h-8 text-right"
+                    />
+                  </div>
+                )}
               </div>
+              {servicosExtras.map((l) => {
+                const s = servicos.find((x) => x.id === l.servicoId);
+                if (!s) return null;
+                const v = valorDaLinha(l, servicos, pet?.porte ?? null, creditos);
+                return (
+                  <div key={l.chave} className="flex justify-between">
+                    <span className="text-muted-foreground">+ {s.nome}</span>
+                    <span className={v === 0 && l.usarPlano ? "text-primary" : ""}>
+                      {v === 0 && l.usarPlano ? "Plano" : formatCentavos(v)}
+                    </span>
+                  </div>
+                );
+              })}
               {totalAdicionais > 0 && (
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Adicionais</span>

@@ -31,6 +31,7 @@ export type Plano = {
   permite_acumular: boolean;
   servico_id: string;
   servicoNome: string;
+  itens: { servico_id: string; quantidade: number; nome: string }[];
 };
 
 export type ServicoOption = { id: string; nome: string; duracao_min: number };
@@ -130,7 +131,7 @@ export function PlanosTable({
             <TableHeader>
               <TableRow>
                 <TableHead>Plano</TableHead>
-                <TableHead>Banhos por mês</TableHead>
+                <TableHead>Créditos por mês</TableHead>
                 <TableHead>Mensalidade</TableHead>
                 <TableHead className="hidden md:table-cell">Pets no plano</TableHead>
                 <TableHead className="hidden lg:table-cell">Receita/mês</TableHead>

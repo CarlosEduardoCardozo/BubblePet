@@ -18,7 +18,7 @@ export default async function PlanosPage({
   let query = supabase
     .from("planos")
     .select(
-      "id, nome, creditos_mes, preco_centavos, permite_acumular, servico_id, servicos(nome, ativo)",
+      "id, nome, creditos_mes, preco_centavos, permite_acumular, servico_id, servicos(nome, ativo), plano_itens(servico_id, quantidade, criado_em, servicos(nome))",
       { count: "exact" }
     )
     .eq("ativo", true)
@@ -75,6 +75,17 @@ export default async function PlanosPage({
     <PlanosTable
       planos={(planos ?? []).map((plano) => {
         const servico = plano.servicos as unknown as { nome: string; ativo: boolean } | null;
+        const itens = ((plano.plano_itens as unknown as {
+          servico_id: string;
+          quantidade: number;
+          criado_em: string;
+          servicos: { nome: string } | null;
+        }[]) ?? [])
+          .slice()
+          .sort((a, b) =>
+            a.servico_id === plano.servico_id ? -1 : b.servico_id === plano.servico_id ? 1 : a.criado_em.localeCompare(b.criado_em)
+          )
+          .map((i) => ({ servico_id: i.servico_id, quantidade: i.quantidade, nome: i.servicos?.nome ?? "" }));
         return {
           id: plano.id,
           nome: plano.nome,
@@ -82,7 +93,13 @@ export default async function PlanosPage({
           preco_centavos: plano.preco_centavos,
           permite_acumular: plano.permite_acumular,
           servico_id: plano.servico_id,
-          servicoNome: servico?.ativo ? servico.nome : "",
+          servicoNome:
+            itens.length > 1
+              ? itens.map((i) => `${i.quantidade} ${i.nome}`).join(" · ")
+              : servico?.ativo
+                ? servico.nome
+                : "",
+          itens,
         };
       })}
       busca={q}
