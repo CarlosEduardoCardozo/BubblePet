@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import { DateTime } from "luxon";
 import { toast } from "sonner";
-import { Check, CheckCheck, Pencil, Plus, UserX, XCircle } from "lucide-react";
+import { Check, CheckCheck, Pencil, Plus, RotateCcw, Trash2, UserX, Wallet, XCircle } from "lucide-react";
 import {
   Sheet,
   SheetContent,
@@ -19,12 +19,32 @@ import { Textarea } from "@/components/ui/textarea";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { FormSelect } from "@/components/shared/FormSelect";
-import { formatCentavos } from "@/lib/currency";
+import { formatCentavos, parseCentavos } from "@/lib/currency";
+import { CurrencyInput } from "@/components/shared/CurrencyInput";
 import {
+  apagarAgendamento,
   atualizarAdicionais,
+  desfazerRecebimento,
+  reabrirAgendamento,
+  reabrirExtratoDoAgendamento,
+  receberNoCaixa,
   updateAgendamento,
   updateAgendamentoStatus,
+  type ResultadoReabrir,
 } from "@/app/(app)/agenda/actions";
+import { PagamentoExtratoDialog } from "@/app/(app)/financeiro/PagamentoExtratoDialog";
+import { createClient } from "@/lib/supabase/client";
+import type { MetodoPagamento } from "@/lib/pagamentos";
+import { somaServicosExtras } from "@/lib/servicos-extras";
+import {
+  ServicosExtrasEditor,
+  duracaoDasLinhas,
+  linhasDeServicosExtras,
+  pedidosDasLinhas,
+  rotuloCredito,
+  useCreditosDoPet,
+  type LinhaServicoExtra,
+} from "./ServicosExtrasEditor";
 import { somaAdicionais } from "@/lib/adicionais";
 import { precoParaPorte } from "@/lib/servico-preco";
 import { STATUS_LABELS, type AgendamentoStatus } from "@/lib/agendamento";
@@ -46,6 +66,31 @@ import {
   type LinhaAdicional,
 } from "./AdicionaisEditor";
 import type { AgendamentoEvent, PetOption, ServicoOption } from "./AgendaView";
+
+type MetodoRow = Omit<MetodoPagamento, "taxas" | "taxa_fixa_valor"> & {
+  taxa_fixa_valor: number | string | null;
+  metodo_taxas_parcela: { parcelas: number; percentual: number | string }[] | null;
+};
+
+/** Formas de pagamento ativas, pra receber o avulso no caixa. */
+async function carregarMetodos(): Promise<MetodoPagamento[]> {
+  const supabase = createClient();
+  const { data } = await supabase
+    .from("metodos_pagamento")
+    .select(
+      "id, descricao, tipo, bandeira, ativo, caixa_id, taxa_fixa_tipo, taxa_fixa_valor, prazo_modo, prazo_dias, parcelado_modo, max_parcelas, sistema, metodo_taxas_parcela(parcelas, percentual)"
+    )
+    .eq("ativo", true)
+    .order("sistema", { ascending: false })
+    .order("descricao");
+  return ((data ?? []) as unknown as MetodoRow[]).map(({ metodo_taxas_parcela, ...m }) => ({
+    ...m,
+    taxa_fixa_valor: m.taxa_fixa_valor === null ? null : Number(m.taxa_fixa_valor),
+    taxas: (metodo_taxas_parcela ?? [])
+      .map((t) => ({ parcelas: t.parcelas, percentual: Number(t.percentual) }))
+      .sort((a, b) => a.parcelas - b.parcelas),
+  }));
+}
 
 export function AgendamentoDetailSheet({
   open,
@@ -76,10 +121,19 @@ export function AgendamentoDetailSheet({
   onChanged: () => void;
 }) {
   const [isPending, startTransition] = useTransition();
-  const [confirmando, setConfirmando] = useState<"cancelado" | "faltou" | null>(null);
+  const [confirmando, setConfirmando] = useState<"cancelado" | "faltou" | "apagar" | null>(null);
   const [editando, setEditando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
-  const [edicao, setEdicao] = useState({ data: "", hora: "", servicoId: "", observacoes: "" });
+  const [edicao, setEdicao] = useState({ data: "", hora: "", servicoId: "", observacoes: "", valor: "" });
+  const [linhasServicos, setLinhasServicos] = useState<LinhaServicoExtra[]>([]);
+  // Reabrir/apagar barrado por extrato já enviado ou pago: mostra o aviso
+  // com o botão de reabrir o extrato aqui mesmo.
+  const [bloqueioExtrato, setBloqueioExtrato] = useState<{
+    acao: "reabrir" | "apagar";
+    mensagem: string;
+  } | null>(null);
+  const [metodos, setMetodos] = useState<MetodoPagamento[] | null>(null);
+  const [recebendo, setRecebendo] = useState(false);
   const [editandoExtras, setEditandoExtras] = useState(false);
   const [linhasExtras, setLinhasExtras] = useState<LinhaAdicional[]>([]);
 
@@ -91,8 +145,10 @@ export function AgendamentoDetailSheet({
     setEditando(false);
     setEditandoExtras(false);
     setErro(null);
+    setBloqueioExtrato(null);
   }
   const dados = agendamento ?? ultimo;
+  const creditosEdicao = useCreditosDoPet(editando && dados ? dados.petId : "", edicao.data);
 
   function aplicarStatus(status: AgendamentoStatus) {
     if (!dados) return;
@@ -117,7 +173,12 @@ export function AgendamentoDetailSheet({
       hora: dt.toFormat("HH:mm"),
       servicoId: dados.servicoId,
       observacoes: dados.observacoes ?? "",
+      valor:
+        !dados.origemPlano && dados.valorCentavos != null
+          ? formatCentavos(dados.valorCentavos).replace("R$", "").trim()
+          : "",
     });
+    setLinhasServicos(linhasDeServicosExtras(dados.servicosExtras));
     setErro(null);
     setEditando(true);
   }
@@ -130,18 +191,123 @@ export function AgendamentoDetailSheet({
       setErro("Escolha a data e o horário.");
       return;
     }
+    const pedidos = pedidosDasLinhas(linhasServicos, creditosEdicao);
+    if (!pedidos.ok) {
+      setErro(pedidos.erro);
+      return;
+    }
+    const valorCentavos = edicao.valor.trim() ? parseCentavos(edicao.valor) : null;
+    if (edicao.valor.trim() && valorCentavos == null) {
+      setErro("Valor do serviço inválido.");
+      return;
+    }
     const id = dados.id;
     startTransition(async () => {
       const result = await updateAgendamento(id, {
         inicio: inicio.toISO()!,
         servicoId: edicao.servicoId,
         observacoes: edicao.observacoes,
+        valorCentavos,
+        servicosExtras: pedidos.pedidos,
       });
       if ("error" in result) {
         setErro(result.error);
       } else {
         toast.success("Agendamento atualizado.");
         setEditando(false);
+        onChanged();
+      }
+    });
+  }
+
+  function tratarBloqueio(acao: "reabrir" | "apagar", result: ResultadoReabrir): boolean {
+    if ("error" in result) {
+      if (result.extratoBloqueado) setBloqueioExtrato({ acao, mensagem: result.error });
+      else toast.error(result.error);
+      return false;
+    }
+    setBloqueioExtrato(null);
+    return true;
+  }
+
+  function reabrir() {
+    if (!dados) return;
+    const id = dados.id;
+    startTransition(async () => {
+      const result = await reabrirAgendamento(id);
+      if (tratarBloqueio("reabrir", result)) {
+        toast.success("Agendamento reaberto. Dá pra editar, concluir de novo ou cancelar.");
+        onChanged();
+      }
+    });
+  }
+
+  function apagar() {
+    if (!dados) return;
+    const id = dados.id;
+    startTransition(async () => {
+      const result = await apagarAgendamento(id);
+      setConfirmando(null);
+      if (tratarBloqueio("apagar", result)) {
+        toast.success("Agendamento apagado.");
+        onOpenChange(false);
+        onChanged();
+      }
+    });
+  }
+
+  /** Reabre o extrato em que o atendimento está e repete o que foi barrado. */
+  function reabrirExtratoEContinuar() {
+    if (!dados || !bloqueioExtrato) return;
+    const id = dados.id;
+    const acao = bloqueioExtrato.acao;
+    startTransition(async () => {
+      const r = await reabrirExtratoDoAgendamento(id);
+      if ("error" in r) {
+        toast.error(r.error);
+        return;
+      }
+      setBloqueioExtrato(null);
+      toast.success("Extrato reaberto. Lembre de gerar e enviar de novo no Financeiro.");
+      if (acao === "reabrir") {
+        const result = await reabrirAgendamento(id);
+        if (tratarBloqueio("reabrir", result)) {
+          toast.success("Agendamento reaberto.");
+          onChanged();
+        }
+      } else {
+        const result = await apagarAgendamento(id);
+        if (tratarBloqueio("apagar", result)) {
+          toast.success("Agendamento apagado.");
+          onOpenChange(false);
+          onChanged();
+        }
+      }
+    });
+  }
+
+  function abrirRecebimento() {
+    setRecebendo(true);
+    if (metodos === null) void carregarMetodos().then(setMetodos);
+  }
+
+  async function confirmarRecebimento(pagamento: { metodoId: string; parcelas: number; data: string }) {
+    if (!dados) return null;
+    const result = await receberNoCaixa(dados.id, pagamento);
+    if ("error" in result) return result.error;
+    toast.success("Recebido. O valor entrou no caixa e o atendimento aparece como pago no extrato.");
+    onChanged();
+    return null;
+  }
+
+  function desfazerPagamento() {
+    if (!dados) return;
+    const id = dados.id;
+    startTransition(async () => {
+      const result = await desfazerRecebimento(id);
+      if ("error" in result) toast.error(result.error);
+      else {
+        toast.success("Recebimento desfeito. O valor saiu do caixa.");
         onChanged();
       }
     });
@@ -180,13 +346,23 @@ export function AgendamentoDetailSheet({
   const encerrado = dados?.status === "concluido" || dados?.status === "cancelado" || dados?.status === "faltou";
   const porte = dados ? (pets.find((p) => p.id === dados.petId)?.porte ?? null) : null;
   const totalExtras = somaAdicionais(dados?.adicionais);
+  const totalServicosExtras = somaServicosExtras(dados?.servicosExtras);
+  const creditosUsados = dados
+    ? (dados.origemPlano ? 1 : 0) + dados.servicosExtras.filter((e) => e.assinaturaId).length
+    : 0;
+  const totalAtendimento = dados
+    ? (dados.origemPlano ? 0 : (dados.valorCentavos ?? 0)) + totalServicosExtras + totalExtras
+    : 0;
+  const podeReceber =
+    !!dados && !dados.pagoEm && !dados.cobrado && totalAtendimento > 0 &&
+    dados.status !== "cancelado" && dados.status !== "faltou";
   // Extras podem entrar até depois do banho, enquanto não foram cobrados.
   const podeEditarExtras =
-    !!dados && !dados.cobrado && dados.status !== "cancelado" && dados.status !== "faltou";
+    !!dados && !dados.cobrado && !dados.pagoEm && dados.status !== "cancelado" && dados.status !== "faltou";
 
   // Horários livres pro dia da edição, ignorando o próprio agendamento.
   const servicoEdicao = servicos.find((s) => s.id === edicao.servicoId) ?? null;
-  const duracaoEdicao = servicoEdicao?.duracao_min ?? 30;
+  const duracaoEdicao = (servicoEdicao?.duracao_min ?? 30) + duracaoDasLinhas(linhasServicos, servicos);
   const ocupadosSemEste = dados
     ? ocupados.filter((o) => o.id !== dados.id)
     : ocupados;
@@ -244,31 +420,70 @@ export function AgendamentoDetailSheet({
                 )}
               </div>
 
-              <div
-                className={
-                  dados.origemPlano
-                    ? "rounded-xl bg-primary/5 px-3 py-2 text-sm"
-                    : "rounded-xl bg-muted px-3 py-2 text-sm"
-                }
-              >
-                {dados.origemPlano ? (
-                  <>
-                    <span className="font-medium text-primary">Coberto pelo plano</span>
-                    <span className="text-muted-foreground">
-                      {" — 1 crédito do mês."}
-                      {totalExtras > 0 ? " Só os adicionais são cobrados." : " Sem cobrança."}
+              <div className="flex flex-col gap-2 rounded-xl border border-border px-3 py-2.5 text-sm">
+                <div className="flex justify-between gap-3">
+                  <span className="text-muted-foreground">{dados.servicoNome.split(" + ")[0]}</span>
+                  <span className={dados.origemPlano ? "font-medium text-primary" : ""}>
+                    {dados.origemPlano
+                      ? "Plano"
+                      : dados.valorCentavos != null
+                        ? formatCentavos(dados.valorCentavos)
+                        : "valor do serviço"}
+                  </span>
+                </div>
+                {dados.servicosExtras.map((e) => (
+                  <div key={e.servicoId} className="flex justify-between gap-3">
+                    <span className="text-muted-foreground">+ {e.nome}</span>
+                    <span className={e.assinaturaId ? "font-medium text-primary" : ""}>
+                      {e.assinaturaId ? "Plano" : formatCentavos(e.valorCentavos)}
                     </span>
-                  </>
+                  </div>
+                ))}
+                {creditosUsados > 0 && (
+                  <span className="text-xs text-muted-foreground">
+                    <span className="font-medium text-primary">Coberto pelo plano</span> —{" "}
+                    {creditosUsados} crédito{creditosUsados === 1 ? "" : "s"} do mês.
+                  </span>
+                )}
+                {totalAtendimento > 0 ? (
+                  <div className="flex flex-col gap-2 border-t border-border pt-2">
+                    <div className="flex justify-between font-semibold">
+                      <span>Total a cobrar</span>
+                      <span>{formatCentavos(totalAtendimento)}</span>
+                    </div>
+                    {dados.pagoEm ? (
+                      <div className="flex items-center justify-between gap-2 rounded-lg bg-status-concluido/10 px-2.5 py-1.5 text-xs">
+                        <span className="font-medium text-status-concluido">
+                          Recebido no caixa em {DateTime.fromISO(dados.pagoEm).setZone(ZONE).toFormat("dd/LL")}
+                        </span>
+                        {!dados.cobrado && (
+                          <button
+                            type="button"
+                            onClick={desfazerPagamento}
+                            disabled={isPending}
+                            className="font-medium text-muted-foreground underline hover:text-foreground"
+                          >
+                            Desfazer
+                          </button>
+                        )}
+                      </div>
+                    ) : podeReceber ? (
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-xs text-muted-foreground">
+                          Ou deixa pro extrato do mês do tutor.
+                        </span>
+                        <Button size="sm" variant="outline" onClick={abrirRecebimento} disabled={isPending}>
+                          <Wallet size={14} /> Receber no caixa
+                        </Button>
+                      </div>
+                    ) : dados.cobrado ? (
+                      <span className="text-xs text-muted-foreground">Já cobrado num extrato enviado.</span>
+                    ) : (
+                      <span className="text-xs text-muted-foreground">Entra no extrato do mês do tutor.</span>
+                    )}
+                  </div>
                 ) : (
-                  <>
-                    <span className="font-medium">Avulso</span>
-                    <span className="text-muted-foreground">
-                      {" — "}
-                      {dados.valorCentavos != null
-                        ? `${formatCentavos(dados.valorCentavos)}, entra no fechamento do mês.`
-                        : "valor do serviço na data."}
-                    </span>
-                  </>
+                  <span className="text-xs text-muted-foreground">Sem cobrança.</span>
                 )}
               </div>
 
@@ -336,7 +551,7 @@ export function AgendamentoDetailSheet({
                   ))}
                   <div className="flex justify-between border-t border-border pt-1 font-semibold">
                     <span>Total do atendimento</span>
-                    <span>{formatCentavos((dados.origemPlano ? 0 : (dados.valorCentavos ?? 0)) + totalExtras)}</span>
+                    <span>{formatCentavos(totalAtendimento)}</span>
                   </div>
                   {dados.cobrado && (
                     <span className="text-xs text-muted-foreground">Já cobrado num extrato enviado.</span>
@@ -394,11 +609,37 @@ export function AgendamentoDetailSheet({
                     </Button>
                   </div>
                 )}
-                {encerrado && dados.status !== "concluido" && (
-                  <Button variant="outline" disabled={isPending} onClick={() => aplicarStatus("agendado")}>
-                    Reabrir agendamento
+                {bloqueioExtrato && (
+                  <div role="alert" className="flex flex-col gap-2 rounded-xl border border-[#e8c45f] bg-sun/25 px-3 py-2.5 text-sm">
+                    <span className="text-[#5c3d00]">{bloqueioExtrato.mensagem}</span>
+                    <div className="flex justify-end gap-2">
+                      <Button size="sm" variant="ghost" onClick={() => setBloqueioExtrato(null)} disabled={isPending}>
+                        Deixar como está
+                      </Button>
+                      <Button size="sm" onClick={reabrirExtratoEContinuar} disabled={isPending}>
+                        {isPending
+                          ? "Reabrindo..."
+                          : bloqueioExtrato.acao === "apagar"
+                            ? "Reabrir extrato e apagar"
+                            : "Reabrir extrato e o agendamento"}
+                      </Button>
+                    </div>
+                  </div>
+                )}
+                {encerrado && (
+                  <Button variant="outline" disabled={isPending} onClick={reabrir}>
+                    <RotateCcw size={16} /> Reabrir agendamento
                   </Button>
                 )}
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-destructive hover:text-destructive"
+                  disabled={isPending}
+                  onClick={() => setConfirmando("apagar")}
+                >
+                  <Trash2 size={14} /> Apagar agendamento
+                </Button>
               </SheetFooter>
             </div>
           )}
@@ -433,12 +674,15 @@ export function AgendamentoDetailSheet({
                 <FormSelect
                   id="edit-servico"
                   value={edicao.servicoId}
-                  onValueChange={(servicoId) => setEdicao((v) => ({ ...v, servicoId, hora: "" }))}
+                  onValueChange={(servicoId) => {
+                    setEdicao((v) => ({ ...v, servicoId, hora: "", valor: "" }));
+                    setLinhasServicos((atual) => atual.filter((l) => l.servicoId !== servicoId));
+                  }}
                   disabled={dados.origemPlano}
                   options={servicos.map((s) => ({
                     value: s.id,
                     label: s.nome,
-                    hint: `${s.duracao_min} min · ${formatCentavos(precoParaPorte(s, porte))}`,
+                    hint: `${s.duracao_min} min · ${formatCentavos(precoParaPorte(s, porte))}${rotuloCredito(creditosEdicao?.get(s.id))}`,
                   }))}
                 />
                 {dados.origemPlano && (
@@ -446,6 +690,39 @@ export function AgendamentoDetailSheet({
                     Atendimento pago com crédito do plano: dá pra mudar o horário, não o serviço.
                   </p>
                 )}
+              </div>
+
+              {!dados.origemPlano && (
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="edit-valor">Valor do serviço</Label>
+                  <CurrencyInput
+                    id="edit-valor"
+                    value={edicao.valor}
+                    placeholder={
+                      servicoEdicao ? formatCentavos(precoParaPorte(servicoEdicao, porte)).replace("R$", "").trim() : "0,00"
+                    }
+                    onChange={(e) => setEdicao((v) => ({ ...v, valor: e.target.value }))}
+                    disabled={!!dados.pagoEm}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    {dados.pagoEm
+                      ? "Já recebido no caixa: desfaça o recebimento para mudar valores."
+                      : "Vazio = preço do serviço pelo porte. Dá pra dar desconto ou cobrar a mais."}
+                  </p>
+                </div>
+              )}
+
+              <div className="flex flex-col gap-1.5">
+                <Label>Outros serviços no mesmo horário</Label>
+                <ServicosExtrasEditor
+                  linhas={linhasServicos}
+                  onChange={setLinhasServicos}
+                  servicos={servicos}
+                  servicoPrincipalId={edicao.servicoId}
+                  porte={porte}
+                  creditos={creditosEdicao}
+                  disabled={isPending || !!dados.pagoEm}
+                />
               </div>
 
               <div className="flex flex-col gap-1.5">
@@ -490,6 +767,32 @@ export function AgendamentoDetailSheet({
         pendingLabel="Cancelando..."
         onConfirm={() => aplicarStatus("cancelado")}
         pending={isPending}
+      />
+      <ConfirmDialog
+        open={confirmando === "apagar"}
+        onOpenChange={(o) => !o && setConfirmando(null)}
+        title="Apagar este agendamento?"
+        description={[
+          "Ele some da agenda e do histórico. Não dá pra desfazer.",
+          creditosUsados > 0 ? "Os créditos do plano voltam para o pet." : "",
+          dados?.pagoEm ? `O recebimento de ${formatCentavos(totalAtendimento)} sai do caixa.` : "",
+        ]
+          .filter(Boolean)
+          .join(" ")}
+        confirmLabel="Apagar"
+        pendingLabel="Apagando..."
+        onConfirm={apagar}
+        pending={isPending}
+      />
+      <PagamentoExtratoDialog
+        extrato={
+          recebendo && dados
+            ? { id: dados.id, tutorNome: `${dados.petNome} · ${dados.tutorNome}`, totalCentavos: totalAtendimento }
+            : null
+        }
+        metodos={metodos ?? []}
+        onOpenChange={(o) => !o && setRecebendo(false)}
+        onConfirmar={confirmarRecebimento}
       />
       <ConfirmDialog
         open={confirmando === "faltou"}

@@ -1,5 +1,6 @@
 "use client";
 
+import { doBanco, type ServicoExtra } from "@/lib/servicos-extras";
 import { useCallback, useEffect, useState, useRef, useMemo } from "react";
 import { DateTime } from "luxon";
 import { Plus, Gift, SlidersHorizontal, PawPrint } from "lucide-react";
@@ -72,6 +73,12 @@ export type AgendamentoEvent = {
   origemPlano: boolean;
   valorCentavos: number | null;
   adicionais: Adicional[];
+  /** Outros serviços no mesmo horário (Banho + Hidratação...). */
+  servicosExtras: ServicoExtra[];
+  /** Recebido no caixa pelo próprio agendamento. */
+  pagoEm: string | null;
+  /** Está num extrato (enviado ou não). */
+  fechamentoId: string | null;
   /** Já entrou num extrato enviado ou pago: valores congelados. */
   cobrado: boolean;
   /** Lembretes automáticos deste atendimento (horas antes); null = atendimento antigo, sem automático. */
@@ -153,7 +160,7 @@ export function AgendaView({
     const { data, error } = await supabase
       .from("agendamentos")
       .select(
-        "id, inicio, fim, status, observacoes, pet_id, servico_id, origem_plano, valor_centavos, adicionais, avisos, pets(nome, tutores(nome)), servicos(nome), fechamentos(status, enviado_em), agendamento_chegada(condicoes, observacao, mostrar_tutor), agendamento_midias(id, caminho, tipo, criado_em)"
+        "id, inicio, fim, status, observacoes, pet_id, servico_id, origem_plano, valor_centavos, adicionais, servicos_extras, pago_em, fechamento_id, avisos, pets(nome, tutores(nome)), servicos(nome), fechamentos(status, enviado_em), agendamento_chegada(condicoes, observacao, mostrar_tutor), agendamento_midias(id, caminho, tipo, criado_em)"
       )
       .gte("inicio", start.toISOString())
       .lt("inicio", end.toISOString())
@@ -191,10 +198,15 @@ export function AgendaView({
           petNome: pet?.nome ?? "",
           tutorNome: pet?.tutores?.nome ?? "",
           servicoId: row.servico_id,
-          servicoNome: servico?.nome ?? "",
+          servicoNome: [servico?.nome ?? "", ...doBanco(row.servicos_extras).map((e) => e.nome)]
+            .filter(Boolean)
+            .join(" + "),
           origemPlano: row.origem_plano,
           valorCentavos: row.valor_centavos,
           adicionais: extras.ok ? extras.adicionais : [],
+          servicosExtras: doBanco(row.servicos_extras),
+          pagoEm: row.pago_em,
+          fechamentoId: row.fechamento_id,
           cobrado: !!fechamento && (fechamento.status === "pago" || !!fechamento.enviado_em),
           lembretes: lembretesDoAgendamento(row.avisos),
           chegada: {

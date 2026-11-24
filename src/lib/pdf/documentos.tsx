@@ -85,8 +85,13 @@ function LinhasBanho({ chave, nome, datas, valor }: {
             <Text style={s.cData}>
               {d.data} <Text style={{ color: MUTED }}>{d.diaSemana}</Text>
             </Text>
-            <Text style={s.cDesc}>{nome}</Text>
-            <Text style={[s.cValor, v.destaque ? { color: TEAL } : {}]}>{v.texto}</Text>
+            <Text style={s.cDesc}>
+              {d.servicoNome ?? nome}
+              {d.agendado ? <Text style={{ color: MUTED }}> (agendado)</Text> : null}
+            </Text>
+            <Text style={[s.cValor, v.destaque || d.pagoNoCaixaCentavos != null ? { color: TEAL } : {}]}>
+              {d.pagoNoCaixaCentavos != null ? `${formatCentavos(d.pagoNoCaixaCentavos)} pago` : v.texto}
+            </Text>
           </View>,
           ...d.adicionais.map((extra, j) => (
             <View key={`${chave}-${idx}-extra-${j}`} style={s.linha}>
@@ -175,9 +180,14 @@ function FechamentoTutorPdf({ dados }: { dados: FechamentoPdfInput }) {
                   <Text style={s.cDesc}>
                     {plano.nome}
                     {plano.petAdicional ? " (pet adicional)" : ""}
-                    {plano.banhos.length > 0
-                      ? ` — ${plano.banhos.length}${plano.creditosMes ? ` de ${plano.creditosMes}` : ""} usado${plano.banhos.length === 1 ? "" : "s"}`
-                      : ""}
+                    {(() => {
+                      const usados = plano.banhos.filter((b) => !b.agendado).length;
+                      const agendados = plano.banhos.length - usados;
+                      if (plano.banhos.length === 0) return "";
+                      return ` — ${usados}${plano.creditosMes ? ` de ${plano.creditosMes}` : ""} usado${usados === 1 ? "" : "s"}${
+                        agendados > 0 ? `, ${agendados} agendado${agendados === 1 ? "" : "s"}` : ""
+                      }`;
+                    })()}
                   </Text>
                   <Text style={s.cValor}>
                     {plano.mensalidade ? formatCentavos(plano.mensalidade.valorCentavos) : ""}

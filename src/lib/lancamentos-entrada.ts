@@ -31,8 +31,9 @@ export type EntradaInput = {
   categoriaId: string | null;
   /** Caixa escolhido na mão; nulo = o do método, senão o principal. */
   caixaId: string | null;
-  origem: "manual" | "extrato";
+  origem: "manual" | "extrato" | "agendamento";
   fechamentoId?: string | null;
+  agendamentoId?: string | null;
 };
 
 export async function lancarEntrada(
@@ -87,6 +88,7 @@ export async function lancarEntrada(
         data_lancamento: e.data,
         origem: e.origem,
         fechamento_id: e.fechamentoId ?? null,
+        agendamento_id: e.agendamentoId ?? null,
         ...l,
         grupo_id: grupoId,
         status: recebido ? "realizado" : "previsto",
